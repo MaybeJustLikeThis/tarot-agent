@@ -1,0 +1,116 @@
+[
+  {
+    "id": "single",
+    "name_cn": "单张牌",
+    "name_en": "Single Card",
+    "description": "简单直接，适合日常指引或快速问题",
+    "positions": [
+      {
+        "index": 0,
+        "name_cn": "指引",
+        "name_en": "Guidance",
+        "description": "对你当前 situation 的核心指引"
+      }
+    ],
+    "min_cards": 1,
+    "max_cards": 1
+  },
+  {
+    "id": "three_card",
+    "name_cn": "三张牌",
+    "name_en": "Three Card",
+    "description": "时间线展开，适合理解 situation 的发展脉络",
+    "positions": [
+      {
+        "index": 0,
+        "name_cn": "过去",
+        "name_en": "Past",
+        "description": "影响当前 situation 的过去因素或根源"
+      },
+      {
+        "index": 1,
+        "name_cn": "现在",
+        "name_en": "Present",
+        "description": "当前 situation 的核心能量或挑战"
+      },
+      {
+        "index": 2,
+        "name_cn": "未来",
+        "name_en": "Future",
+        "description": "基于当前轨迹，可能的发展方向"
+      }
+    ],
+    "min_cards": 3,
+    "max_cards": 3
+  },
+  {
+    "id": "celtic_cross",
+    "name_cn": "凯尔特十字",
+    "name_en": "Celtic Cross",
+    "description": "深度全面分析，适合复杂问题或重要决策",
+    "positions": [
+      {
+        "index": 0,
+        "name_cn": "现状",
+        "name_en": "Present",
+        "description": "你当前 situation 的核心"
+      },
+      {
+        "index": 1,
+        "name_cn": "挑战",
+        "name_en": "Challenge",
+        "description": "当前面临的主要挑战或障碍"
+      },
+      {
+        "index": 2,
+        "name_cn": "根源",
+        "name_en": "Root",
+        "description": "situation 的深层原因或潜意识影响"
+      },
+      {
+        "index": 3,
+        "name_cn": "过去",
+        "name_en": "Past",
+        "description": "最近的过去如何影响现在"
+      },
+      {
+        "index": 4,
+        "name_cn": "可能",
+        "name_en": "Possibility",
+        "description": "你希望达成的目标或最好的可能"
+      },
+      {
+        "index": 5,
+        "name_cn": "近未来",
+        "name_en": "Near Future",
+        "description": "近期可能发生的事"
+      },
+      {
+        "index": 6,
+        "name_cn": "自我认知",
+        "name_en": "Self",
+        "description": "你如何看待自己"
+      },
+      {
+        "index": 7,
+        "name_cn": "环境",
+        "name_en": "Environment",
+        "description": "周围环境和他人的影响"
+      },
+      {
+        "index": 8,
+        "name_cn": "希望与恐惧",
+        "name_en": "Hopes & Fears",
+        "description": "你的希望或恐惧"
+      },
+      {
+        "index": 9,
+        "name_cn": "结果",
+        "name_en": "Outcome",
+        "description": "如果保持当前方向的最终结果"
+      }
+    ],
+    "min_cards": 10,
+    "max_cards": 10
+  }
+]
