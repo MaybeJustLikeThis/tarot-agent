@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"log/slog"
 	"os"
@@ -22,6 +23,9 @@ func main() {
 }
 
 func run() error {
+	modeFlag := flag.String("mode", "", "reading mode: 'pro' or 'casual'")
+	flag.Parse()
+
 	var cfg *bootstrap.Config
 
 	// First-run setup
@@ -36,6 +40,18 @@ func run() error {
 		cfg, err = bootstrap.LoadConfig()
 		if err != nil {
 			return fmt.Errorf("load config: %w", err)
+		}
+	}
+
+	// Command-line mode overrides config
+	if *modeFlag != "" {
+		switch *modeFlag {
+		case "pro":
+			cfg.Mode = "professional"
+		case "casual":
+			cfg.Mode = "casual"
+		default:
+			return fmt.Errorf("invalid mode %q: use 'pro' or 'casual'", *modeFlag)
 		}
 	}
 
@@ -64,8 +80,9 @@ func run() error {
 	slog.Info("model initialized", "model", cfg.Model)
 
 	// Build agent
-	result := agents.BuildAgent(model, s, agents.ModeProfessional)
-	slog.Info("agent built")
+	mode := agents.ParseMode(cfg.Mode)
+	result := agents.BuildAgent(model, s, mode)
+	slog.Info("agent built", "mode", mode.Label())
 
 	// Signal handling
 	ctx, cancel := context.WithCancel(context.Background())

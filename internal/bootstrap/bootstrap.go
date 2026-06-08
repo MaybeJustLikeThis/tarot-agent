@@ -17,6 +17,7 @@ type Config struct {
 
 	// App settings
 	LogLevel string
+	Mode     string // "professional" 或 "casual"
 }
 
 const (
@@ -31,6 +32,7 @@ func DefaultConfig() *Config {
 		Model:    defaultModel,
 		BaseURL:  defaultBaseURL,
 		LogLevel: defaultLogLevel,
+		Mode:     "professional",
 	}
 }
 
@@ -52,6 +54,9 @@ func LoadConfig() (*Config, error) {
 		if fc.Model != "" {
 			cfg.Model = fc.Model
 		}
+		if fc.Mode != "" {
+			cfg.Mode = fc.Mode
+		}
 	}
 
 	// Layer 2: env vars (override file)
@@ -69,6 +74,9 @@ func LoadConfig() (*Config, error) {
 	}
 	if v := os.Getenv("TAROT_LOG_LEVEL"); v != "" {
 		cfg.LogLevel = v
+	}
+	if v := os.Getenv("TAROT_MODE"); v != "" {
+		cfg.Mode = v
 	}
 
 	if cfg.APIKey == "" {

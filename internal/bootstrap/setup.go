@@ -32,6 +32,7 @@ type fileConfig struct {
 	APIKey  string `json:"api_key"`
 	BaseURL string `json:"base_url,omitempty"`
 	Model   string `json:"model,omitempty"`
+	Mode    string `json:"mode,omitempty"`
 }
 
 // loadFileConfig reads config from ~/.tarot-agent/config.json if it exists.
@@ -122,11 +123,25 @@ func RunSetup() (*Config, error) {
 		return nil, fmt.Errorf("API key 不能为空")
 	}
 
+	fmt.Println()
+	fmt.Println("  选择解读模式：")
+	fmt.Println("    1. 专业模式 — 包含元素、占星、数字等深度分析")
+	fmt.Println("    2. 轻松模式 — 温暖对话式解读，不使用专业术语")
+	fmt.Print("  请选择 [1/2]（默认 1）：> ")
+
+	modeInput, _ := reader.ReadString('\n')
+	modeInput = strings.TrimSpace(modeInput)
+	mode := "professional"
+	if modeInput == "2" {
+		mode = "casual"
+	}
+
 	// Save to file
 	fc := &fileConfig{
 		APIKey:  apiKey,
 		BaseURL: defaultBaseURL,
 		Model:   defaultModel,
+		Mode:    mode,
 	}
 	if err := saveFileConfig(fc); err != nil {
 		return nil, fmt.Errorf("save config: %w", err)
@@ -141,6 +156,7 @@ func RunSetup() (*Config, error) {
 		APIKey:   fc.APIKey,
 		BaseURL:  fc.BaseURL,
 		Model:    fc.Model,
+		Mode:     fc.Mode,
 		LogLevel: defaultLogLevel,
 	}, nil
 }
