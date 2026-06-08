@@ -42,6 +42,7 @@ type Card struct {
 	UprightMeaning  string     `json:"upright_meaning"`
 	ReversedMeaning string     `json:"reversed_meaning"`
 	ImageFile        string           `json:"image_file"`
+	NameAliases      []string         `json:"name_aliases,omitempty"`
 	// Enriched fields (added for professional readings)
 	Element          string           `json:"element,omitempty"`
 	Astrology        *AstrologyInfo   `json:"astrology,omitempty"`

@@ -22,6 +22,7 @@
     "upright_meaning": "创造力的爆发、新灵感、新机会的到来、激情与行动力的点燃。权杖Ace代表一个充满活力的新开始，鼓励你大胆追求灵感。",
     "reversed_meaning": "缺乏方向、创造力受阻、机会被延迟或错失。你可能感到精力分散或无法将想法付诸实践。",
     "image_file": "wands-01.png",
+    "name_aliases": ["权杖一"],
     "element": "fire",
     "astrology": {
       "sub_influence": "白羊座/狮子座/射手座（火象星座共性）"

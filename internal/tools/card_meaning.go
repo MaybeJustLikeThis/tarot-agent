@@ -61,6 +61,12 @@ func (t *cardMeaningTool) Execute(_ context.Context, args json.RawMessage) (json
 			if card.NameCN == params.CardName || card.NameEN == params.CardName {
 				return formatCardMeaning(card)
 			}
+			// Check aliases
+			for _, alias := range card.NameAliases {
+				if alias == params.CardName {
+					return formatCardMeaning(card)
+				}
+			}
 		}
 		return nil, fmt.Errorf("card %q not found", params.CardName)
 	}
