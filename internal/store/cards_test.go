@@ -221,3 +221,113 @@ func TestCardStore_MinorCardFields(t *testing.T) {
 		t.Error("expected non-empty reversed_meaning for swords ace")
 	}
 }
+
+func TestCardEnrichedFields(t *testing.T) {
+	cs, err := store.NewCardStore(
+		store.MajorArcanaJSON(),
+		store.MinorWandsJSON(),
+		store.MinorCupsJSON(),
+		store.MinorSwordsJSON(),
+		store.MinorPentaclesJSON(),
+	)
+	if err != nil {
+		t.Fatalf("NewCardStore failed: %v", err)
+	}
+
+	for _, card := range cs.GetAll() {
+		t.Run(card.ID, func(t *testing.T) {
+			if card.Element == "" {
+				t.Errorf("card %s: missing element", card.ID)
+			}
+			if card.Astrology == nil {
+				t.Errorf("card %s: missing astrology", card.ID)
+			}
+			if card.Numerology == nil {
+				t.Errorf("card %s: missing numerology", card.ID)
+			}
+			if card.Imagery == "" {
+				t.Errorf("card %s: missing imagery", card.ID)
+			}
+
+			// Major arcana must have keywords_context
+			if card.Arcana == "major" {
+				if card.KeywordsContext == nil {
+					t.Errorf("major arcana %s: missing keywords_context", card.ID)
+				}
+			}
+
+			// Court cards (number 11-14, minor arcana only) must have court_role
+			if card.Number >= 11 && card.Number <= 14 && card.Arcana == "minor" {
+				if card.CourtRole == nil {
+					t.Errorf("court card %s: missing court_role", card.ID)
+				}
+			}
+		})
+	}
+}
+
+func TestElementConsistency(t *testing.T) {
+	validElements := map[string]bool{
+		"fire": true, "water": true, "air": true, "earth": true,
+	}
+
+	cs, err := store.NewCardStore(
+		store.MajorArcanaJSON(),
+		store.MinorWandsJSON(),
+		store.MinorCupsJSON(),
+		store.MinorSwordsJSON(),
+		store.MinorPentaclesJSON(),
+	)
+	if err != nil {
+		t.Fatalf("NewCardStore failed: %v", err)
+	}
+
+	suitElements := map[string]string{
+		"wands": "fire", "cups": "water", "swords": "air", "pentacles": "earth",
+	}
+
+	for _, card := range cs.GetAll() {
+		t.Run(card.ID, func(t *testing.T) {
+			if !validElements[card.Element] {
+				t.Errorf("card %s: invalid element %q", card.ID, card.Element)
+			}
+			if expected, ok := suitElements[string(card.Suit)]; ok {
+				if card.Element != expected {
+					t.Errorf("card %s: suit %s should have element %s, got %s",
+						card.ID, card.Suit, expected, card.Element)
+				}
+			}
+		})
+	}
+}
+
+func TestNumerologyRange(t *testing.T) {
+	cs, err := store.NewCardStore(
+		store.MajorArcanaJSON(),
+		store.MinorWandsJSON(),
+		store.MinorCupsJSON(),
+		store.MinorSwordsJSON(),
+		store.MinorPentaclesJSON(),
+	)
+	if err != nil {
+		t.Fatalf("NewCardStore failed: %v", err)
+	}
+
+	for _, card := range cs.GetAll() {
+		if card.Number < 1 || card.Number > 10 {
+			continue // Skip court cards and major arcana
+		}
+		if card.Arcana == "major" {
+			continue // Skip major arcana for this test
+		}
+		t.Run(card.ID, func(t *testing.T) {
+			if card.Numerology == nil {
+				t.Fatalf("card %s: missing numerology", card.ID)
+			}
+			if card.Numerology.Number != card.Number {
+				t.Errorf("card %s: numerology.number=%d but card.number=%d",
+					card.ID, card.Numerology.Number, card.Number)
+			}
+		})
+	}
+}

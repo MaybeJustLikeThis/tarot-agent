@@ -30,3 +30,5 @@ internal/host/tui/testdata/
 
 # Config (contains API keys)
 ~/.tarot-agent/
+store.out
+coverage.out
