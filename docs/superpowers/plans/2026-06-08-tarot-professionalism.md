@@ -1,0 +1,1592 @@
+# 塔罗专业性增强实施计划
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** 将牌面数据从"大众科普"提升到专业塔罗师水平，同时支持 B2B（专业）和 C2C（通俗）两种解读模式。
+
+**Architecture:** 扩展现有 JSON 数据（元素、占星、数理、画面象征、宫庭牌人格），新增全局知识文件，拆分 system prompt 为专业/通俗两版，通过 AgentMode 参数切换。
+
+**Tech Stack:** Go 1.25.5, go:embed, Charmbracelet BubbleTea, agentcore
+
+**Spec:** `docs/superpowers/specs/2026-06-08-tarot-professionalism-design.md`
+
+---
+
+## File Structure
+
+| 文件 | 变更类型 | 职责 |
+|------|---------|------|
+| `internal/domain/card.go` | 修改 | Card struct 新增 Element、Astrology、Numerology、Imagery、KeywordsContext、CourtRole 字段 |
+| `internal/store/assets/cards/major_arcana.json` | 修改 | 22 张大牌新增 element/astrology/numerology/imagery/keywords_context |
+| `internal/store/assets/cards/minor_wands.json` | 修改 | 14 张权杖牌新增 element/numerology/astrology/imagery/keywords_context，宫庭牌新增 court_role |
+| `internal/store/assets/cards/minor_cups.json` | 同上 | 14 张圣杯牌 |
+| `internal/store/assets/cards/minor_swords.json` | 同上 | 14 张宝剑牌 |
+| `internal/store/assets/cards/minor_pentacles.json` | 同上 | 14 张星币牌 |
+| `internal/store/assets/knowledge/elements.json` | 新增 | 元素互动规则、花色含义、数理通用含义 |
+| `internal/store/store.go` | 修改 | 新增 ElementKnowledge 加载 |
+| `internal/store/cards_test.go` | 修改 | 新增字段完整性测试 |
+| `internal/store/knowledge_test.go` | 新增 | 全局知识文件测试 |
+| `internal/agents/build.go` | 修改 | 新增 AgentMode，选择 prompt 文件 |
+| `internal/agents/prompts/system_pro.md` | 新增 | 专业版 system prompt |
+| `internal/agents/prompts/system_casual.md` | 新增 | 通俗版 system prompt |
+| `internal/agents/prompts/system.md` | 删除 | 拆分为上面两个 |
+| `internal/bootstrap/bootstrap.go` | 修改 | Config 新增 Mode 字段 |
+| `internal/bootstrap/setup.go` | 修改 | 首次向导新增模式选择 |
+| `cmd/tarot-agent/main.go` | 修改 | 新增 --mode 命令行参数 |
+| `internal/host/tui/model.go` | 修改 | 接收 mode 参数，传递给状态栏 |
+| `internal/host/tui/render.go` | 修改 | 状态栏显示模式标识 |
+| `internal/host/tui/app.go` | 修改 | Run() 接收 mode 参数 |
+
+---
+
+## Task 1: 扩展 Card 数据结构
+
+**Files:**
+- Modify: `internal/domain/card.go`
+- Test: `internal/domain/domain_test.go`
+
+- [ ] **Step 1: 扩展 Card struct**
+
+在 `internal/domain/card.go` 的 `Card` struct 中新增字段：
+
+```go
+// AstrologyInfo holds astrological correspondences for a card.
+type AstrologyInfo struct {
+	Planet string `json:"planet,omitempty"`
+	Zodiac string `json:"zodiac,omitempty"`
+	Note   string `json:"note,omitempty"`
+}
+
+// NumerologyInfo holds numerological significance of a card.
+type NumerologyInfo struct {
+	Number int    `json:"number"`
+	Meaning string `json:"meaning"`
+	Note   string `json:"note,omitempty"`
+}
+
+// KeywordsContext holds scenario-specific keywords.
+type KeywordsContext struct {
+	Love   []string `json:"love"`
+	Career []string `json:"career"`
+	Growth []string `json:"growth"`
+}
+
+// CourtRole describes the special role of court cards (Page/Knight/Queen/King).
+type CourtRole struct {
+	Archetype  string `json:"archetype"`
+	Personality string `json:"personality"`
+	AsPerson   string `json:"as_person"`
+	AsMessage  string `json:"as_message"`
+}
+```
+
+然后在 `Card` struct 中追加：
+
+```go
+// Enriched fields (added for professional readings)
+Element         string           `json:"element,omitempty"`
+Astrology       *AstrologyInfo   `json:"astrology,omitempty"`
+Numerology      *NumerologyInfo  `json:"numerology,omitempty"`
+Imagery         string           `json:"imagery,omitempty"`
+KeywordsContext *KeywordsContext  `json:"keywords_context,omitempty"`
+CourtRole       *CourtRole       `json:"court_role,omitempty"`
+```
+
+- [ ] **Step 2: 验证编译通过**
+
+Run: `cd D:/Mycase/tarot-agent && go build ./...`
+Expected: 无报错
+
+- [ ] **Step 3: 运行现有测试确认无破坏**
+
+Run: `cd D:/Mycase/tarot-agent && go test ./internal/domain/... -v`
+Expected: 所有现有测试 PASS（新字段 omitempty，不影响现有 JSON 反序列化）
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add internal/domain/card.go
+git commit -m "feat(domain): Card struct 新增元素/占星/数理/画面/宫庭牌字段"
+```
+
+---
+
+## Task 2: 充实大牌数据 (major_arcana.json)
+
+**Files:**
+- Modify: `internal/store/assets/cards/major_arcana.json`
+
+- [ ] **Step 1: 写入充实后的大牌数据**
+
+将 `major_arcana.json` 中每张牌追加以下字段（保留所有现有字段不变）。22 张牌全部需要充实。以下是完整内容（基于 spec 中的 RWS 传统对应表）：
+
+```json
+[
+  {
+    "id": "major_00",
+    "name_cn": "愚者",
+    "name_en": "The Fool",
+    "arcana": "major",
+    "suit": "",
+    "number": 0,
+    "upright_keywords": ["新开始", "冒险", "天真", "自由", "信仰"],
+    "reversed_keywords": ["鲁莽", "冒失", "恐惧未知", "不计后果", "停滞"],
+    "upright_meaning": "新开始、冒险精神、天真无邪、自由、信仰的飞跃。愚者代表着一段新旅程的开始，带着纯真和勇气踏入未知。",
+    "reversed_meaning": "鲁莽行事、冒失、恐惧未知、不计后果、停滞不前。逆位的愚者提醒你三思而后行。",
+    "image_file": "00-fool.png",
+    "element": "air",
+    "astrology": {
+      "planet": "天王星",
+      "note": "传统对应天王星，代表突变与自由精神"
+    },
+    "numerology": {
+      "number": 0,
+      "meaning": "无限可能、起点之前、虚无与圆满",
+      "note": "0 是唯一不在愚者之旅序列中的数字，代表纯粹潜能"
+    },
+    "imagery": "一个年轻人身着彩衣站在悬崖边，背着小包袱，仰望天空，身旁有一只小白狗。他似乎毫不在意脚下的深渊，右手持白玫瑰（纯洁），象征着对未知的天真信任和对生活的纯粹热情。",
+    "keywords_context": {
+      "love": ["新恋情的开始", "无条件的信任", "关系中的冒险"],
+      "career": ["新项目启动", "创业精神", "不走寻常路"],
+      "growth": ["拥抱未知", "放下恐惧", "回归初心"]
+    }
+  },
+  {
+    "id": "major_01",
+    "name_cn": "魔术师",
+    "name_en": "The Magician",
+    "arcana": "major",
+    "suit": "",
+    "number": 1,
+    "upright_keywords": ["创造力", "意志力", "技能", "显化", "行动"],
+    "reversed_keywords": ["操控", "欺骗", "浪费才能", "缺乏方向", "能力未施展"],
+    "upright_meaning": "创造力、意志力、技能、资源充足、显化能力。魔术师告诉你，你拥有实现目标所需的一切资源。",
+    "reversed_meaning": "操控、欺骗、浪费才能、缺乏方向、能力未施展。警惕投机取巧或自我欺骗。",
+    "image_file": "01-magician.png",
+    "element": "air",
+    "astrology": {
+      "planet": "水星",
+      "note": "水星守护，代表沟通、智慧与显化能力"
+    },
+    "numerology": {
+      "number": 1,
+      "meaning": "起源、意志、显化、万物之始",
+      "note": "愚者之旅的第一步，从潜能到行动"
+    },
+    "imagery": "一个身穿红白长袍的年轻人站在桌前，右手指天、左手指地，象征"如其在上，如其在下"。桌上摆放着权杖、圣杯、宝剑、星币四元素工具。头顶无穷大符号（∞），身周开满红玫瑰和白百合。",
+    "keywords_context": {
+      "love": ["主动追求", "展现魅力", "用行动表达爱意"],
+      "career": ["资源整合", "项目启动", "展现专业能力"],
+      "growth": ["相信自己的能力", "将想法付诸行动", "意志力的锻炼"]
+    }
+  },
+  {
+    "id": "major_02",
+    "name_cn": "女祭司",
+    "name_en": "The High Priestess",
+    "arcana": "major",
+    "suit": "",
+    "number": 2,
+    "upright_keywords": ["直觉", "潜意识", "智慧", "神秘", "静默"],
+    "reversed_keywords": ["忽视直觉", "表面化", "秘密浮出", "过度依赖理性"],
+    "upright_meaning": "直觉、潜意识、内在智慧、神秘、静待时机。女祭司邀请你倾听内心深处的声音。",
+    "reversed_meaning": "忽视直觉、表面化、秘密浮出、过度依赖理性。你可能忽略了内心的直觉指引。",
+    "image_file": "02-high-priestess.png",
+    "element": "water",
+    "astrology": {
+      "planet": "月亮",
+      "note": "月亮守护，代表潜意识、直觉与阴性能量"
+    },
+    "numerology": {
+      "number": 2,
+      "meaning": "二元性、直觉、隐秘、内在智慧",
+      "note": "与魔术师的显化力量形成阴阳互补"
+    },
+    "imagery": "一位端庄的女性坐在两根柱子（B=黑色代表物质，J=白色代表精神）之间，身穿蓝袍，手持半卷 TORA 律法卷轴。头顶新月，身后是一片石榴图案的帷幕（隐藏的知识），脚下是一弯满月。",
+    "keywords_context": {
+      "love": ["倾听内心感受", "不要急于表态", "感情中的隐秘面"],
+      "career": ["等待时机", "相信直觉判断", "幕后工作的价值"],
+      "growth": ["冥想与内省", "接受未知", "培养直觉力"]
+    }
+  },
+  {
+    "id": "major_03",
+    "name_cn": "女皇",
+    "name_en": "The Empress",
+    "arcana": "major",
+    "suit": "",
+    "number": 3,
+    "upright_keywords": ["丰饶", "母性", "自然", "创造", "滋养"],
+    "reversed_keywords": ["依赖他人", "缺乏安全感", "创造力受阻", "过度溺爱"],
+    "upright_meaning": "丰饶、母性、自然、创造力、感官享受。女皇带来生长、滋养和丰盛的能量。",
+    "reversed_meaning": "依赖他人、缺乏安全感、创造力受阻、过度溺爱。可能需要重新找回自我价值感。",
+    "image_file": "03-empress.png",
+    "element": "earth",
+    "astrology": {
+      "planet": "金星",
+      "note": "金星守护，代表爱、美、丰饶与感官享受"
+    },
+    "numerology": {
+      "number": 3,
+      "meaning": "创造力、生长、丰饶、表达",
+      "note": "创造力从意志（1）和直觉（2）的结合中诞生"
+    },
+    "imagery": "一位丰满美丽的女性坐在户外软垫上，头戴十二星冠，身穿印有石榴图案的长袍。周围是茂盛的麦田和森林，脚下有一颗红心。她手持权杖，身后有瀑布流淌，象征大自然的丰饶与创造力。",
+    "keywords_context": {
+      "love": ["感性与浪漫", "关系的滋养", "表达爱与美"],
+      "career": ["创意项目", "团队的滋养者", "享受工作成果"],
+      "growth": ["与自然连接", "滋养自我", "允许自己享受生活"]
+    }
+  },
+  {
+    "id": "major_04",
+    "name_cn": "皇帝",
+    "name_en": "The Emperor",
+    "arcana": "major",
+    "suit": "",
+    "number": 4,
+    "upright_keywords": ["权威", "结构", "稳定", "领导力", "纪律"],
+    "reversed_keywords": ["专制", "僵化", "控制欲", "缺乏灵活性"],
+    "upright_meaning": "权威、结构、稳定、领导力、纪律。皇帝代表秩序和掌控力，建立坚实的基础。",
+    "reversed_meaning": "专制、僵化、控制欲、缺乏灵活性。可能过于严厉或不愿变通。",
+    "image_file": "04-emperor.png",
+    "element": "fire",
+    "astrology": {
+      "zodiac": "白羊座",
+      "note": "白羊座守护，代表开创、领导与行动力"
+    },
+    "numerology": {
+      "number": 4,
+      "meaning": "结构、稳定、秩序、基础",
+      "note": "从创造力（3）中建立起秩序"
+    },
+    "imagery": "一位威严的长者坐在石质宝座上，宝座装饰着四个白羊头。他身穿红袍，右手持安卡十字权杖，左手持圆球（世界）。背景是 barren 的山脉，象征他建立的坚固秩序。",
+    "keywords_context": {
+      "love": ["稳定承诺", "保护与安全感", "关系中的规则"],
+      "career": ["领导岗位", "建立制度", "权威与掌控"],
+      "growth": ["自律与纪律", "建立人生结构", "成为自己的主人"]
+    }
+  },
+  {
+    "id": "major_05",
+    "name_cn": "教皇",
+    "name_en": "The Hierophant",
+    "arcana": "major",
+    "suit": "",
+    "number": 5,
+    "upright_keywords": ["传统", "信仰", "教育", "引导", "归属"],
+    "reversed_keywords": ["叛逆", "非传统", "打破常规", "自我探索"],
+    "upright_meaning": "传统、信仰、教育、引导、归属。教皇代表传统智慧和精神指引。",
+    "reversed_meaning": "叛逆、非传统、打破常规、自我探索。可能需要质疑既有规则，走自己的路。",
+    "image_file": "05-hierophant.png",
+    "element": "earth",
+    "astrology": {
+      "zodiac": "金牛座",
+      "note": "金牛座守护，代表传统价值、信仰与稳定"
+    },
+    "numerology": {
+      "number": 5,
+      "meaning": "信仰、教导、传统、精神探索",
+      "note": "从结构（4）中产生对意义的追寻"
+    },
+    "imagery": "一位宗教领袖坐在两根灰色柱子之间，头戴三重冠，身穿红袍。右手举起做祝福手势，左手持三重十字权杖。两位信徒跪在他面前，象征传统知识的传递。",
+    "keywords_context": {
+      "love": ["传统关系观", "寻求长辈建议", "共同信仰的纽带"],
+      "career": ["导师指引", "学习传统", "制度化组织"],
+      "growth": ["寻找精神导师", "学习传统智慧", "找到归属感"]
+    }
+  },
+  {
+    "id": "major_06",
+    "name_cn": "恋人",
+    "name_en": "The Lovers",
+    "arcana": "major",
+    "suit": "",
+    "number": 6,
+    "upright_keywords": ["爱情", "和谐", "选择", "价值观", "结合"],
+    "reversed_keywords": ["不和谐", "价值观冲突", "错误选择", "犹豫不决"],
+    "upright_meaning": "爱情、和谐、选择、价值观、结合。恋人牌代表深层的连接和重要的人生选择。",
+    "reversed_meaning": "不和谐、价值观冲突、错误选择、犹豫不决。可能面临选择困难或关系中的摩擦。",
+    "image_file": "06-lovers.png",
+    "element": "air",
+    "astrology": {
+      "zodiac": "双子座",
+      "note": "双子座守护，代表选择、二元性与沟通"
+    },
+    "numerology": {
+      "number": 6,
+      "meaning": "和谐、结合、选择、爱",
+      "note": "在信仰（5）之后，做出心灵的选择"
+    },
+    "imagery": "天使拉斐尔在云端张开双臂祝福下方的裸体男女。女人身后是知善恶树（缠着蛇），男人身后是生命之树（燃烧着十二火焰）。背景是一座山，象征选择的高峰。",
+    "keywords_context": {
+      "love": ["深层连接", "重要选择", "价值观的契合"],
+      "career": ["合作伙伴选择", "价值观驱动的决策", "团队和谐"],
+      "growth": ["面对内心冲突", "做出真实选择", "整合内在对立面"]
+    }
+  },
+  {
+    "id": "major_07",
+    "name_cn": "战车",
+    "name_en": "The Chariot",
+    "arcana": "major",
+    "suit": "",
+    "number": 7,
+    "upright_keywords": ["意志力", "胜利", "决心", "行动力", "克服障碍"],
+    "reversed_keywords": ["失控", "方向迷失", "攻击性", "缺乏自制"],
+    "upright_meaning": "意志力、胜利、决心、行动力、克服障碍。战车代表通过坚定意志取得成功。",
+    "reversed_meaning": "失控、方向迷失、攻击性、缺乏自制。可能感到力量分散或失去方向。",
+    "image_file": "07-chariot.png",
+    "element": "water",
+    "astrology": {
+      "zodiac": "巨蟹座",
+      "note": "巨蟹座守护，代表保护、意志与情感驱动的行动"
+    },
+    "numerology": {
+      "number": 7,
+      "meaning": "意志、胜利、征服、内在驱动力",
+      "note": "在选择（6）之后，以意志力向前推进"
+    },
+    "imagery": "一位铠甲战士站在石质战车中，头戴星冠，手持权杖。战车由一黑一白两只狮身人面兽拉动，它们方向相反但被战士的意志统一。战车上装饰着星星和翅膀符号。",
+    "keywords_context": {
+      "love": ["主动出击", "克服障碍在一起", "意志力守护关系"],
+      "career": ["坚定目标", "竞争中胜出", "掌控方向"],
+      "growth": ["自律", "整合内在矛盾", "以意志驱动改变"]
+    }
+  },
+  {
+    "id": "major_08",
+    "name_cn": "力量",
+    "name_en": "Strength",
+    "arcana": "major",
+    "suit": "",
+    "number": 8,
+    "upright_keywords": ["内在力量", "勇气", "耐心", "柔克刚", "自控"],
+    "reversed_keywords": ["自我怀疑", "虚弱", "恐惧", "缺乏信心"],
+    "upright_meaning": "内在力量、勇气、耐心、柔克刚、自控。力量牌提醒你真正的强大来自内心。",
+    "reversed_meaning": "自我怀疑、虚弱、恐惧、缺乏信心。可能需要重新找回内在的力量和自信。",
+    "image_file": "08-strength.png",
+    "element": "fire",
+    "astrology": {
+      "zodiac": "狮子座",
+      "note": "狮子座守护，代表勇气、力量与内心的王者"
+    },
+    "numerology": {
+      "number": 8,
+      "meaning": "力量、掌控、耐心、内在勇气",
+      "note": "外在胜利（7）之后，发现真正的力量在内心"
+    },
+    "imagery": "一位白衣女性温柔地合上（或打开）一头狮子的嘴。她头顶也有无穷大符号（∞），头上戴着花环，身上别着玫瑰花。狮子的尾巴翘起，看起来温顺但充满力量。背景是绿色山丘。",
+    "keywords_context": {
+      "love": ["温柔的力量", "以耐心化解冲突", "关系中的勇气"],
+      "career": ["以柔克刚", "耐心等待结果", "内在自信"],
+      "growth": ["面对恐惧", "培养内在力量", "驯服内心的野兽"]
+    }
+  },
+  {
+    "id": "major_09",
+    "name_cn": "隐士",
+    "name_en": "The Hermit",
+    "arcana": "major",
+    "suit": "",
+    "number": 9,
+    "upright_keywords": ["内省", "独处", "智慧", "引导", "寻找真理"],
+    "reversed_keywords": ["孤立", "逃避", "固步自封", "拒绝帮助"],
+    "upright_meaning": "内省、独处、智慧、引导、寻找真理。隐士邀请你向内探索，寻找属于自己的答案。",
+    "reversed_meaning": "孤立、逃避、固步自封、拒绝帮助。可能过度封闭自己或逃避现实。",
+    "image_file": "09-hermit.png",
+    "element": "earth",
+    "astrology": {
+      "zodiac": "处女座",
+      "note": "处女座守护，代表分析、内省与追求完美"
+    },
+    "numerology": {
+      "number": 9,
+      "meaning": "智慧、内省、完成、孤独的追寻",
+      "note": "力量（8）之后，转向内在寻求更深的智慧"
+    },
+    "imagery": "一位灰袍老者站在雪山之巅，右手持发光的灯笼（内含六芒星），左手持长杖。他独自站立，俯瞰下方的世界。灰色斗篷象征隐身与谦逊，灯笼象征内在之光。",
+    "keywords_context": {
+      "love": ["需要独处思考", "关系中的距离感", "寻找内心真正想要的"],
+      "career": ["独立工作", "深度思考", "寻找职业方向"],
+      "growth": ["独处的价值", "向内探索", "寻找人生导师"]
+    }
+  },
+  {
+    "id": "major_10",
+    "name_cn": "命运之轮",
+    "name_en": "Wheel of Fortune",
+    "arcana": "major",
+    "suit": "",
+    "number": 10,
+    "upright_keywords": ["转变", "命运", "机遇", "循环", "好运"],
+    "reversed_keywords": ["坏运气", "抗拒改变", "失控", "外力干扰"],
+    "upright_meaning": "转变、命运、机遇、循环、好运。命运之轮提醒你变化是永恒的，把握当下的机遇。",
+    "reversed_meaning": "坏运气、抗拒改变、失控、外力干扰。可能正在经历不顺或抗拒必要的改变。",
+    "image_file": "10-wheel-of-fortune.png",
+    "element": "fire",
+    "astrology": {
+      "planet": "木星",
+      "note": "木星守护，代表扩张、机遇与命运转折"
+    },
+    "numerology": {
+      "number": 10,
+      "meaning": "循环、命运、转折、完成与新开始",
+      "note": "10=1+0，大牌序列的中点，命运之轮转动"
+    },
+    "imagery": "一个巨大的轮子浮在云端。轮上有四个字母 TARO（也可读作 ROTA=TARO=TORA=ORAT），以及四个炼金术符号。轮子上方坐着狮身人面兽（斯芬克斯），右侧是蛇（下降），左侧是阿努比斯（上升）。四角有四个带翼生物（人、鹰、狮、牛）各持一本书。",
+    "keywords_context": {
+      "love": ["命运般的相遇", "关系转折点", "接受变化"],
+      "career": ["机遇降临", "行业变革", "把握转折点"],
+      "growth": ["接受无常", "顺应生命节奏", "在变化中找到中心"]
+    }
+  },
+  {
+    "id": "major_11",
+    "name_cn": "正义",
+    "name_en": "Justice",
+    "arcana": "major",
+    "suit": "",
+    "number": 11,
+    "upright_keywords": ["公正", "平衡", "真相", "因果", "责任"],
+    "reversed_keywords": ["不公正", "逃避责任", "偏见", "不诚实"],
+    "upright_meaning": "公正、平衡、真相、因果、责任。正义牌提醒你每个选择都有后果，诚实面对真相。",
+    "reversed_meaning": "不公正、逃避责任、偏见、不诚实。可能需要审视是否对某事缺乏公正态度。",
+    "image_file": "11-justice.png",
+    "element": "air",
+    "astrology": {
+      "zodiac": "天秤座",
+      "note": "天秤座守护，代表平衡、公正与因果法则"
+    },
+    "numerology": {
+      "number": 11,
+      "meaning": "平衡、真相、因果、裁决",
+      "note": "大师数字11，灵性洞察力与公正判断"
+    },
+    "imagery": "一位端坐的女性形象（性别模糊），右手持垂直的双刃剑（真相），左手持天秤（平衡）。她坐在灰色柱子之间，身穿红袍，头戴金冠，脚下露出一只鞋——提醒因果不爽。",
+    "keywords_context": {
+      "love": ["诚实面对关系", "平等互惠", "做出公正的决定"],
+      "career": ["合规与公正", "合同签署", "评估与审计"],
+      "growth": ["为自己的选择负责", "寻求真相", "平衡给予与接受"]
+    }
+  },
+  {
+    "id": "major_12",
+    "name_cn": "倒吊人",
+    "name_en": "The Hanged Man",
+    "arcana": "major",
+    "suit": "",
+    "number": 12,
+    "upright_keywords": ["放下", "牺牲", "新视角", "等待", "顿悟"],
+    "reversed_keywords": ["拖延", "抗拒", "徒劳牺牲", "钻牛角尖"],
+    "upright_meaning": "放下、牺牲、新视角、等待、顿悟。倒吊人邀请你换个角度看问题，放下执念。",
+    "reversed_meaning": "拖延、抗拒、徒劳牺牲、钻牛角尖。可能在无意义的事情上浪费时间。",
+    "image_file": "12-hanged-man.png",
+    "element": "water",
+    "astrology": {
+      "planet": "海王星",
+      "note": "海王星守护，代表牺牲、灵性觉醒与超越自我"
+    },
+    "numerology": {
+      "number": 12,
+      "meaning": "牺牲、放下、新视角、灵性觉醒",
+      "note": "12=1+2=3，回到创造力，但以全新的视角"
+    },
+    "imagery": "一个年轻人被倒挂在 T 形木架上，表情平静安详，头部有金色光环。他的一条腿弯曲别在另一条腿后面，双手背在身后（非束缚状态，是自愿的）。背景是黄色天空，象征智慧的获得。",
+    "keywords_context": {
+      "love": ["换个角度看关系", "必要的等待", "放下对结果的执着"],
+      "career": ["暂停行动重新审视", "以退为进", "等待更好的时机"],
+      "growth": ["放下执念", "冥想与静观", "在静止中获得洞察"]
+    }
+  },
+  {
+    "id": "major_13",
+    "name_cn": "死神",
+    "name_en": "Death",
+    "arcana": "major",
+    "suit": "",
+    "number": 13,
+    "upright_keywords": ["结束", "转变", "放下过去", "重生", "蜕变"],
+    "reversed_keywords": ["抗拒改变", "恐惧结束", "停滞", "无法放手"],
+    "upright_meaning": "结束、转变、放下过去、重生、蜕变。死神不代表物理死亡，而是象征旧事物的终结和新阶段的开始。",
+    "reversed_meaning": "抗拒改变、恐惧结束、停滞、无法放手。可能害怕失去而紧紧抓住不再适合的东西。",
+    "image_file": "13-death.png",
+    "element": "water",
+    "astrology": {
+      "zodiac": "天蝎座",
+      "note": "天蝎座守护，代表深度转化、死亡与重生"
+    },
+    "numerology": {
+      "number": 13,
+      "meaning": "结束、转化、释放、重生",
+      "note": "13=1+4=5，回到冲突（5），但以更深刻的方式"
+    },
+    "imagery": "一具黑色铠甲骷髅骑着白马，手持绣有白玫瑰（纯洁/重生）的黑旗。地上有一位倒下的国王，一位少女转过头去，一位孩子好奇地看着。远处太阳在两座塔之间升起——象征死亡之后的新生。",
+    "keywords_context": {
+      "love": ["旧关系的结束", "深刻的转变", "放下不适合的"],
+      "career": ["职业转型", "旧项目终结", "放下过去的成就"],
+      "growth": ["接受结束", "允许自己蜕变", "从废墟中重生"]
+    }
+  },
+  {
+    "id": "major_14",
+    "name_cn": "节制",
+    "name_en": "Temperance",
+    "arcana": "major",
+    "suit": "",
+    "number": 14,
+    "upright_keywords": ["平衡", "耐心", "中庸", "调和", "治愈"],
+    "reversed_keywords": ["失衡", "过度", "急躁", "冲突"],
+    "upright_meaning": "平衡、耐心、中庸、调和、治愈。节制牌提醒你在生活中寻找平衡与和谐。",
+    "reversed_meaning": "失衡、过度、急躁、冲突。可能在某个方面走极端，需要回归平衡。",
+    "image_file": "14-temperance.png",
+    "element": "fire",
+    "astrology": {
+      "zodiac": "射手座",
+      "note": "射手座守护，代表调和、探索与哲学思考"
+    },
+    "numerology": {
+      "number": 14,
+      "meaning": "调和、平衡、耐心、治愈",
+      "note": "14=1+5=6，回到和谐（6），以更成熟的方式"
+    },
+    "imagery": "一位天使一脚踩在水中（潜意识），一脚踩在陆地（现实），正将两个杯子中的水来回倒注，形成无限循环。天使身穿白袍，胸前有三角形（精神）嵌入方形（物质）的符号。远处有一条通往山间太阳的小路。",
+    "keywords_context": {
+      "love": ["平衡与和谐", "耐心经营", "找到相处的节奏"],
+      "career": ["多方协调", "平衡工作与生活", "循序渐进"],
+      "growth": ["寻找生活的平衡点", "耐心与自我调和", "治愈与恢复"]
+    }
+  },
+  {
+    "id": "major_15",
+    "name_cn": "恶魔",
+    "name_en": "The Devil",
+    "arcana": "major",
+    "suit": "",
+    "number": 15,
+    "upright_keywords": ["束缚", "诱惑", "欲望", "执念", "阴暗面"],
+    "reversed_keywords": ["释放", "打破束缚", "觉醒", "重获自由"],
+    "upright_meaning": "束缚、诱惑、欲望、执念、阴暗面。恶魔牌揭示那些限制你的执念和不良习惯。",
+    "reversed_meaning": "释放、打破束缚、觉醒、重获自由。你正在或将要摆脱那些束缚你的东西。",
+    "image_file": "15-devil.png",
+    "element": "earth",
+    "astrology": {
+      "zodiac": "摩羯座",
+      "note": "摩羯座守护，代表物质束缚、野心与阴影面"
+    },
+    "numerology": {
+      "number": 15,
+      "meaning": "束缚、欲望、阴影、物质执念",
+      "note": "15=1+5=6，与恋人牌（6）形成对比：爱的扭曲"
+    },
+    "imagery": "一个半人半兽的恶魔形象（潘神）坐在黑色祭坛上，头上有倒五角星。它右手举起做与教皇相同的祝福手势（但倒置）。祭坛前有一男一女被锁链拴着，但锁链很松——他们可以随时挣脱。他们的尾巴燃烧着火焰。",
+    "keywords_context": {
+      "love": ["不健康的关系模式", "执念与占有", "欲望的束缚"],
+      "career": ["对金钱/权力的执念", "工作中的诱惑", "不道德的交易"],
+      "growth": ["面对阴影面", "识别自我束缚", "挣脱心理枷锁"]
+    }
+  },
+  {
+    "id": "major_16",
+    "name_cn": "塔",
+    "name_en": "The Tower",
+    "arcana": "major",
+    "suit": "",
+    "number": 16,
+    "upright_keywords": ["突变", "崩塌", "真相", "觉醒", "重建"],
+    "reversed_keywords": ["避免灾难", "延迟崩塌", "恐惧改变", "抗拒真相"],
+    "upright_meaning": "突变、崩塌、揭示真相、觉醒、打破虚假。塔牌虽然令人不安，但摧毁的是不牢固的基础。",
+    "reversed_meaning": "避免灾难、延迟崩塌、恐惧改变、抗拒真相。你可能在推迟必要的改变。",
+    "image_file": "16-tower.png",
+    "element": "fire",
+    "astrology": {
+      "planet": "火星",
+      "note": "火星守护，代表突变、冲突与打破旧结构"
+    },
+    "numerology": {
+      "number": 16,
+      "meaning": "崩塌、突变、真相揭示、释放",
+      "note": "16=1+6=7，回到意志（7），但以摧毁虚假的方式"
+    },
+    "imagery": "一座矗立在山巅的高塔被闪电击中，塔冠（象征虚假的信仰）被吹飞。两人从塔中坠落——他们的姿态与恶魔牌中的男女呼应。火焰从窗口喷出，背景是黑暗的天空。雨滴如火花般落下。",
+    "keywords_context": {
+      "love": ["关系的突然变化", "虚假幻象的破灭", "虽然痛苦但必要"],
+      "career": ["突然的变动", "旧结构崩塌", "被迫重新开始"],
+      "growth": ["接受突变", "在废墟中找到真实", "重建更牢固的基础"]
+    }
+  },
+  {
+    "id": "major_17",
+    "name_cn": "星星",
+    "name_en": "The Star",
+    "arcana": "major",
+    "suit": "",
+    "number": 17,
+    "upright_keywords": ["希望", "灵感", "宁静", "信心", "治愈"],
+    "reversed_keywords": ["失望", "失去信心", "与自我脱节", "创意枯竭"],
+    "upright_meaning": "希望、灵感、宁静、信心、治愈。星星带来希望和更新，在黑暗之后指引方向。",
+    "reversed_meaning": "失望、失去信心、与自我脱节、创意枯竭。可能暂时失去了希望或灵感。",
+    "image_file": "17-star.png",
+    "element": "air",
+    "astrology": {
+      "zodiac": "水瓶座",
+      "note": "水瓶座守护，代表希望、灵感与人道主义"
+    },
+    "numerology": {
+      "number": 17,
+      "meaning": "希望、灵感、治愈、宁静",
+      "note": "17=1+7=8，回到力量（8），但以更柔和、希望的方式"
+    },
+    "imagery": "一位裸体女性跪在池塘边，一手将水倒入池中（潜意识），一手将水倒在大地上（显意识）。天空中有一颗巨大的八芒星被八颗小星环绕。身后有一棵树，上面栖息着一只朱鹮鸟（智慧）。",
+    "keywords_context": {
+      "love": ["新的希望", "治愈旧伤", "相信爱情"],
+      "career": ["灵感涌现", "新的方向", "重拾信心"],
+      "growth": ["自我治愈", "重新连接内在", "相信未来"]
+    }
+  },
+  {
+    "id": "major_18",
+    "name_cn": "月亮",
+    "name_en": "The Moon",
+    "arcana": "major",
+    "suit": "",
+    "number": 18,
+    "upright_keywords": ["幻象", "潜意识", "恐惧", "直觉", "不确定"],
+    "reversed_keywords": ["幻象消散", "恐惧消退", "真相浮现", "理性回归"],
+    "upright_meaning": "幻象、潜意识、恐惧、直觉、不确定。月亮牌提醒你并非所有事情都像表面看起来那样。",
+    "reversed_meaning": "幻象消散、恐惧消退、真相浮现、理性回归。迷雾正在散去，真相即将显现。",
+    "image_file": "18-moon.png",
+    "element": "water",
+    "astrology": {
+      "zodiac": "双鱼座",
+      "note": "双鱼座守护，代表幻象、潜意识与灵性迷雾"
+    },
+    "numerology": {
+      "number": 18,
+      "meaning": "幻象、恐惧、潜意识、直觉的考验",
+      "note": "18=1+8=9，回到隐士（9），但在更深的潜意识层面"
+    },
+    "imagery": "一轮满月在天空中，两侧有塔楼。月亮下方有一只小龙虾从池塘中爬出（潜意识上升），一条狗和一匹狼对着月亮嚎叫（驯服与野性的两面）。露珠如泪水般从月亮脸庞滴落。小径通向远方的山脉。",
+    "keywords_context": {
+      "love": ["不确定的感觉", "幻象与现实", "信任直觉"],
+      "career": ["信息不透明", "谨慎前行", "警惕虚假机会"],
+      "growth": ["面对内心恐惧", "穿越幻象", "潜意识的探索"]
+    }
+  },
+  {
+    "id": "major_19",
+    "name_cn": "太阳",
+    "name_en": "The Sun",
+    "arcana": "major",
+    "suit": "",
+    "number": 19,
+    "upright_keywords": ["快乐", "成功", "活力", "乐观", "真实"],
+    "reversed_keywords": ["暂时低落", "过度乐观", "延迟满足", "内心不安"],
+    "upright_meaning": "快乐、成功、活力、乐观、真实。太阳是最积极的牌之一，带来光明和温暖。",
+    "reversed_meaning": "暂时低落、过度乐观、延迟满足、内心不安。快乐可能暂时被遮蔽，但阳光终将到来。",
+    "image_file": "19-sun.png",
+    "element": "fire",
+    "astrology": {
+      "planet": "太阳",
+      "note": "太阳守护，代表生命力、成功与真实自我的展现"
+    },
+    "numerology": {
+      "number": 19,
+      "meaning": "快乐、成功、活力、真实",
+      "note": "19=1+9=10=1，回到起点（愚者），但带着完整的经验"
+    },
+    "imagery": "一个赤裸的快乐孩童骑在白马上，双手张开，头顶巨大的太阳。孩童头戴红色羽毛（象征纯真与活力），身后是一面灰色高墙，墙上挂满了向日葵。太阳散发出32道光芒（与月亮牌的18道形成对比）。",
+    "keywords_context": {
+      "love": ["快乐与满足", "关系中的阳光", "真实的展现自我"],
+      "career": ["成功与认可", "项目顺利推进", "充满活力"],
+      "growth": ["拥抱快乐", "展现真实的自己", "享受当下"]
+    }
+  },
+  {
+    "id": "major_20",
+    "name_cn": "审判",
+    "name_en": "Judgement",
+    "arcana": "major",
+    "suit": "",
+    "number": 20,
+    "upright_keywords": ["觉醒", "重生", "反思", "召唤", "更高目标"],
+    "reversed_keywords": ["自我怀疑", "逃避反思", "错过机会", "内疚"],
+    "upright_meaning": "觉醒、重生、反思、召唤、更高目标。审判牌代表对人生的整体回顾和精神觉醒。",
+    "reversed_meaning": "自我怀疑、逃避反思、错过机会、内疚。可能在逃避对自己重要的反思和决定。",
+    "image_file": "20-judgement.png",
+    "element": "fire",
+    "astrology": {
+      "planet": "冥王星",
+      "note": "冥王星关联，代表深层转化、业力清算与灵魂觉醒"
+    },
+    "numerology": {
+      "number": 20,
+      "meaning": "觉醒、审判、重生、更高召唤",
+      "note": "20=2+0=2，回到女祭司（2），但以公开觉醒的方式"
+    },
+    "imagery": "天使加百列在云端吹响号角，号角上挂着一面红十字旗帜。下方的棺材中，男女老少张开双臂站起，迎接重生。背景是雪山山脉，象征精神的高峰。",
+    "keywords_context": {
+      "love": ["关系的重新评估", "命运般的重逢", "听从内心的召唤"],
+      "career": ["职业使命感", "人生方向的觉醒", "回顾与重新出发"],
+      "growth": ["自我审视", "回应内心的召唤", "原谅过去，拥抱新生"]
+    }
+  },
+  {
+    "id": "major_21",
+    "name_cn": "世界",
+    "name_en": "The World",
+    "arcana": "major",
+    "suit": "",
+    "number": 21,
+    "upright_keywords": ["完成", "圆满", "成就", "整合", "新旅程"],
+    "reversed_keywords": ["未完成", "缺乏收尾", "延迟完成", "空虚感"],
+    "upright_meaning": "完成、圆满、成就、整合、新旅程。世界牌代表一个重要周期的圆满完成。",
+    "reversed_meaning": "未完成、缺乏收尾、延迟完成、空虚感。可能离终点还差最后一步，需要坚持。",
+    "image_file": "21-world.png",
+    "element": "earth",
+    "astrology": {
+      "planet": "土星",
+      "note": "土星守护，代表完成、业力圆满与结构的终极形态"
+    },
+    "numerology": {
+      "number": 21,
+      "meaning": "完成、圆满、整合、旅程的终点",
+      "note": "21=2+1=3，回到女皇（3）的创造力，但经历了完整的旅程"
+    },
+    "imagery": "一位裸体舞者（性别模糊）在巨大的月桂花环中央翩翩起舞，手持两根权杖。花环是椭圆形的（无穷大符号的变体），被红丝带系住。四角与命运之轮一样有四个带翼生物（人、鹰、狮、牛），它们各据一方守护。",
+    "keywords_context": {
+      "love": ["圆满的关系", "灵魂伴侣", "旅程的完成与新开始"],
+      "career": ["项目圆满完成", "获得认可", "一个阶段的完美收官"],
+      "growth": ["整合所有人生经验", "达到内在圆满", "准备开启新的旅程"]
+    }
+  }
+]
+```
+
+- [ ] **Step 2: 验证 JSON 格式正确**
+
+Run: `cd D:/Mycase/tarot-agent && go build ./...`
+Expected: 编译通过（go:embed 会在编译时加载 JSON）
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add internal/store/assets/cards/major_arcana.json
+git commit -m "feat(data): 大牌数据充实——元素/占星/数理/画面象征/场景关键词"
+```
+
+---
+
+## Task 3: 充实小牌数据 — 权杖 (minor_wands.json)
+
+**Files:**
+- Modify: `internal/store/assets/cards/minor_wands.json`
+
+- [ ] **Step 1: 写入充实后的权杖牌数据**
+
+每张权杖牌追加 `element: "fire"`、`numerology`、`astrology`、`imagery`、`keywords_context`。宫庭牌（11-14）额外追加 `court_role`。保留所有现有字段不变。
+
+**执行方式**：参照 Task 2 大牌的完整 JSON 结构，为 14 张权杖牌逐一编写完整 JSON。关键规则：
+
+- 所有牌：`"element": "fire"`
+- 数字牌（1-10）：`numerology` = `{"number": N, "meaning": "..."}`，meaning 参考 `elements.json` 中的数理含义并结合花色语境
+- 所有牌：`astrology` = `{"sub_influence": "白羊座/狮子座/射手座（火象星座共性）"}`
+- 所有牌：`imagery` = 1-2 句 RWS 牌面关键视觉元素描述
+- 所有牌：`keywords_context` = `{"love": [...], "career": [...], "growth": [...]}` 各 2 个关键词
+- 宫庭牌（number 11-14）：额外 `court_role` = `{"archetype": "...", "personality": "...", "as_person": "...", "as_message": "..."}`
+
+**宫庭牌 archetype 参考**：
+- 侍从（11）：archetype="热情的学习者"，代表年轻人/好奇心/新消息
+- 骑士（12）：archetype="行动的冒险者"，代表快速行动/冲动/魅力
+- 王后（13）：archetype="自信的女王"，代表温暖领导力/魅力/独立
+- 国王（14）：archetype="远见的领袖"，代表企业家精神/魄力/权威
+
+- [ ] **Step 2: 验证 JSON 格式**
+
+Run: `cd D:/Mycase/tarot-agent && go build ./...`
+Expected: 编译通过
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add internal/store/assets/cards/minor_wands.json
+git commit -m "feat(data): 权杖牌数据充实——元素/数理/画面/宫庭牌人格"
+```
+
+---
+
+## Task 4: 充实小牌数据 — 圣杯/宝剑/星币
+
+**Files:**
+- Modify: `internal/store/assets/cards/minor_cups.json`
+- Modify: `internal/store/assets/cards/minor_swords.json`
+- Modify: `internal/store/assets/cards/minor_pentacles.json`
+
+- [ ] **Step 1: 圣杯牌 — 模板与权杖相同，但：**
+  - `element`: `"water"`
+  - `astrology.sub_influence`: "巨蟹座/天蝎座/双鱼座（水象星座共性）"
+  - 宫庭牌人格围绕"情感、关系、直觉"主题
+
+- [ ] **Step 2: 验证 + Commit 圣杯**
+
+```bash
+cd D:/Mycase/tarot-agent && go build ./...
+git add internal/store/assets/cards/minor_cups.json
+git commit -m "feat(data): 圣杯牌数据充实"
+```
+
+- [ ] **Step 3: 宝剑牌 — 模板与权杖相同，但：**
+  - `element`: `"air"`
+  - `astrology.sub_influence`: "双子座/天秤座/水瓶座（风象星座共性）"
+  - 宫庭牌人格围绕"思维、沟通、冲突"主题
+
+- [ ] **Step 4: 验证 + Commit 宝剑**
+
+```bash
+cd D:/Mycase/tarot-agent && go build ./...
+git add internal/store/assets/cards/minor_swords.json
+git commit -m "feat(data): 宝剑牌数据充实"
+```
+
+- [ ] **Step 5: 星币牌 — 模板与权杖相同，但：**
+  - `element`: `"earth"`
+  - `astrology.sub_influence`: "金牛座/处女座/摩羯座（土象星座共性）"
+  - 宫庭牌人格围绕"物质、工作、安全"主题
+
+- [ ] **Step 6: 验证 + Commit 星币**
+
+```bash
+cd D:/Mycase/tarot-agent && go build ./...
+git add internal/store/assets/cards/minor_pentacles.json
+git commit -m "feat(data): 星币牌数据充实"
+```
+
+---
+
+## Task 5: 新增全局知识文件 (elements.json)
+
+**Files:**
+- Create: `internal/store/assets/knowledge/elements.json`
+
+- [ ] **Step 1: 创建 knowledge 目录和文件**
+
+创建 `internal/store/assets/knowledge/elements.json`，内容为 spec 中第二节的完整 JSON（元素互动规则 10 条 + 花色含义 4 条 + 数理含义 10 条）。
+
+- [ ] **Step 2: 在 store.go 中加载**
+
+在 `internal/store/store.go` 中新增：
+
+```go
+//go:embed assets/knowledge/elements.json
+var elementsJSON []byte
+
+// ElementsJSON returns the embedded elements knowledge JSON bytes.
+func ElementsJSON() []byte { return elementsJSON }
+```
+
+新增 `ElementKnowledge` 类型和 `SuitInfo` 类型：
+
+```go
+// SuitInfo describes a tarot suit's element and domain.
+type SuitInfo struct {
+	Element string `json:"element"`
+	Domain  string `json:"domain"`
+}
+
+// ElementKnowledge holds global tarot knowledge about elements, suits, and numerology.
+type ElementKnowledge struct {
+	Interactions map[string]string  `json:"interactions"`
+	SuitMeanings map[string]SuitInfo `json:"suit_meanings"`
+	Numerology   map[string]string  `json:"numerology"`
+}
+
+// NewElementKnowledge loads element knowledge from JSON data.
+func NewElementKnowledge(jsonData []byte) (*ElementKnowledge, error) {
+	var ek ElementKnowledge
+	if err := json.Unmarshal(jsonData, &ek); err != nil {
+		return nil, fmt.Errorf("load element knowledge: %w", err)
+	}
+	return &ek, nil
+}
+```
+
+在 `Store` struct 中新增字段：
+
+```go
+type Store struct {
+	io       *IO
+	Cards    *CardStore
+	Spreads  *SpreadStore
+	Readings *ReadingStore
+	Elements *ElementKnowledge
+}
+```
+
+在 `New()` 函数中初始化：
+
+```go
+elements, err := NewElementKnowledge(elementsJSON)
+if err != nil {
+    return nil, fmt.Errorf("init element knowledge: %w", err)
+}
+```
+
+赋值到 Store：
+
+```go
+return &Store{
+    io:       io,
+    Cards:    cards,
+    Spreads:  spreads,
+    Readings: NewReadingStore(readingsPath),
+    Elements: elements,
+}, nil
+```
+
+- [ ] **Step 3: 验证编译**
+
+Run: `cd D:/Mycase/tarot-agent && go build ./...`
+Expected: 编译通过
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add internal/store/assets/knowledge/elements.json internal/store/store.go
+git commit -m "feat(store): 新增元素知识文件并加载到 Store"
+```
+
+---
+
+## Task 6: 数据层测试
+
+**Files:**
+- Modify: `internal/store/cards_test.go`
+- Create: `internal/store/knowledge_test.go`
+
+- [ ] **Step 1: 在 cards_test.go 中新增字段完整性测试**
+
+```go
+func TestCardEnrichedFields(t *testing.T) {
+	cs, err := store.NewCardStore(
+		store.MajorArcanaJSON(),
+		store.MinorWandsJSON(),
+		store.MinorCupsJSON(),
+		store.MinorSwordsJSON(),
+		store.MinorPentaclesJSON(),
+	)
+	if err != nil {
+		t.Fatalf("NewCardStore failed: %v", err)
+	}
+
+	for _, card := range cs.GetAll() {
+		t.Run(card.ID, func(t *testing.T) {
+			if card.Element == "" {
+				t.Errorf("card %s: missing element", card.ID)
+			}
+			if card.Astrology == nil {
+				t.Errorf("card %s: missing astrology", card.ID)
+			}
+			if card.Numerology == nil {
+				t.Errorf("card %s: missing numerology", card.ID)
+			}
+			if card.Imagery == "" {
+				t.Errorf("card %s: missing imagery", card.ID)
+			}
+
+			// Major arcana must have keywords_context
+			if card.Arcana == "major" {
+				if card.KeywordsContext == nil {
+					t.Errorf("major arcana %s: missing keywords_context", card.ID)
+				}
+			}
+
+			// Court cards (number 11-14) must have court_role
+			if card.Number >= 11 && card.Number <= 14 {
+				if card.CourtRole == nil {
+					t.Errorf("court card %s: missing court_role", card.ID)
+				}
+			}
+		})
+	}
+}
+
+func TestElementConsistency(t *testing.T) {
+	validElements := map[string]bool{
+		"fire": true, "water": true, "air": true, "earth": true,
+	}
+
+	cs, err := store.NewCardStore(
+		store.MajorArcanaJSON(),
+		store.MinorWandsJSON(),
+		store.MinorCupsJSON(),
+		store.MinorSwordsJSON(),
+		store.MinorPentaclesJSON(),
+	)
+	if err != nil {
+		t.Fatalf("NewCardStore failed: %v", err)
+	}
+
+	suitElements := map[string]string{
+		"wands": "fire", "cups": "water", "swords": "air", "pentacles": "earth",
+	}
+
+	for _, card := range cs.GetAll() {
+		t.Run(card.ID, func(t *testing.T) {
+			if !validElements[card.Element] {
+				t.Errorf("card %s: invalid element %q", card.ID, card.Element)
+			}
+			if expected, ok := suitElements[string(card.Suit)]; ok {
+				if card.Element != expected {
+					t.Errorf("card %s: suit %s should have element %s, got %s",
+						card.ID, card.Suit, expected, card.Element)
+				}
+			}
+		})
+	}
+}
+
+func TestNumerologyRange(t *testing.T) {
+	cs, err := store.NewCardStore(
+		store.MajorArcanaJSON(),
+		store.MinorWandsJSON(),
+		store.MinorCupsJSON(),
+		store.MinorSwordsJSON(),
+		store.MinorPentaclesJSON(),
+	)
+	if err != nil {
+		t.Fatalf("NewCardStore failed: %v", err)
+	}
+
+	for _, card := range cs.GetAll() {
+		if card.Number < 1 || card.Number > 10 {
+			continue // Skip court cards and major arcana
+		}
+		if card.Arcana == "major" {
+			continue // Skip major arcana for this test
+		}
+		t.Run(card.ID, func(t *testing.T) {
+			if card.Numerology == nil {
+				t.Fatalf("card %s: missing numerology", card.ID)
+			}
+			if card.Numerology.Number != card.Number {
+				t.Errorf("card %s: numerology.number=%d but card.number=%d",
+					card.ID, card.Numerology.Number, card.Number)
+			}
+		})
+	}
+}
+```
+
+- [ ] **Step 2: 创建 knowledge_test.go**
+
+```go
+package store_test
+
+import (
+	"fmt"
+	"testing"
+
+	"github.com/voocel/tarot-agent/internal/store"
+)
+
+func TestElementInteractions(t *testing.T) {
+	ek, err := store.NewElementKnowledge(store.ElementsJSON())
+	if err != nil {
+		t.Fatalf("NewElementKnowledge failed: %v", err)
+	}
+
+	elements := []string{"fire", "water", "air", "earth"}
+	for _, a := range elements {
+		for _, b := range elements {
+			// Both orderings should exist, but at least one must
+			key1 := a + "_" + b
+			key2 := b + "_" + a
+			if _, ok1 := ek.Interactions[key1]; !ok1 {
+				if _, ok2 := ek.Interactions[key2]; !ok2 {
+					t.Errorf("missing element interaction for %s and %s", a, b)
+				}
+			}
+		}
+	}
+}
+
+func TestNumerologyEntries(t *testing.T) {
+	ek, err := store.NewElementKnowledge(store.ElementsJSON())
+	if err != nil {
+		t.Fatalf("NewElementKnowledge failed: %v", err)
+	}
+
+	for i := 1; i <= 10; i++ {
+		key := fmt.Sprintf("%d", i)
+		if _, ok := ek.Numerology[key]; !ok {
+			t.Errorf("missing numerology entry for %d", i)
+		}
+	}
+}
+
+func TestSuitMeanings(t *testing.T) {
+	ek, err := store.NewElementKnowledge(store.ElementsJSON())
+	if err != nil {
+		t.Fatalf("NewElementKnowledge failed: %v", err)
+	}
+
+	expectedSuits := map[string]string{
+		"wands": "fire", "cups": "water", "swords": "air", "pentacles": "earth",
+	}
+	for suit, expectedElement := range expectedSuits {
+		info, ok := ek.SuitMeanings[suit]
+		if !ok {
+			t.Errorf("missing suit meaning for %s", suit)
+			continue
+		}
+		if info.Element != expectedElement {
+			t.Errorf("suit %s: expected element %s, got %s", suit, expectedElement, info.Element)
+		}
+		if info.Domain == "" {
+			t.Errorf("suit %s: empty domain", suit)
+		}
+	}
+}
+```
+
+- [ ] **Step 3: 运行所有测试**
+
+Run: `cd D:/Mycase/tarot-agent && go test ./internal/store/... -v -count=1`
+Expected: 所有测试 PASS（包括现有测试 + 新增测试）
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add internal/store/cards_test.go internal/store/knowledge_test.go
+git commit -m "test(store): 新增字段完整性、元素一致性、数理范围、知识文件测试"
+```
+
+---
+
+## Task 7: 双 Prompt — AgentMode 集成
+
+**Files:**
+- Modify: `internal/agents/build.go`
+- Modify: `internal/agents/prompts/system_pro.md`（新增，内容基于现有 system.md 扩展）
+- Modify: `internal/agents/prompts/system_casual.md`（新增，基于现有 system.md 简化）
+- Delete: `internal/agents/prompts/system.md`
+
+- [ ] **Step 1: 创建 system_pro.md**
+
+基于现有 `system.md` 创建专业版。核心变更：
+- 解读框架保持 6 层
+- 新增"元素分析"指导：如何利用 card.Element 和 elements.json 做元素互动分析
+- 新增"数字象征"指导：如何利用 card.Numerology 和 elements.json 数理表
+- 新增"占星对应"指导：如何引用 card.Astrology 信息
+- 新增"画面象征"指导：如何利用 card.Imagery 做画面分析
+- 新增"宫庭牌特殊处理"指导：如何利用 card.CourtRole
+- 允许专业术语，但要求括号注释
+- 逆位解读保持四种理解方式
+- 输出长度 1500-2500 字
+- 2-3 个反思问题
+
+- [ ] **Step 2: 创建 system_casual.md**
+
+基于现有 `system.md` 创建通俗版。核心变更：
+- 解读框架简化为 3 层：牌面概述 → 逐张解读（含元素/数字/画面，但用大白话）→ 核心建议
+- 元素用"行动力""情感力""思考力""稳定感"代替术语
+- 数字象征用日常语言描述
+- 牌间关系只讲故事，不分析元素互动
+- 逆位简化为"能量被限制或内化"
+- 宫庭牌只描述能量感觉，不分析人格原型
+- 输出长度 800-1200 字
+- 1 个轻松问题
+- 共通规则保留（语言克制、逆位不是坏牌、禁止玄学词汇等）
+
+- [ ] **Step 3: 修改 build.go 支持 AgentMode**
+
+```go
+package agents
+
+import (
+	_ "embed"
+	"fmt"
+	"log/slog"
+
+	"github.com/voocel/agentcore"
+	"github.com/voocel/agentcore/llm"
+	"github.com/voocel/tarot-agent/internal/host/reminder"
+	"github.com/voocel/tarot-agent/internal/store"
+	"github.com/voocel/tarot-agent/internal/tools"
+)
+
+//go:embed prompts/system_pro.md
+var systemPromptPro string
+
+//go:embed prompts/system_casual.md
+var systemPromptCasual string
+
+// AgentMode controls the depth and style of tarot readings.
+type AgentMode string
+
+const (
+	ModeProfessional AgentMode = "professional"
+	ModeCasual       AgentMode = "casual"
+)
+
+// ParseMode converts a string to AgentMode, defaulting to professional.
+func ParseMode(s string) AgentMode {
+	if s == "casual" {
+		return ModeCasual
+	}
+	return ModeProfessional
+}
+
+// Label returns the Chinese display name for the mode.
+func (m AgentMode) Label() string {
+	if m == ModeCasual {
+		return "轻松模式"
+	}
+	return "专业模式"
+}
+
+// BuildResult holds the agent and its associated guard for event tracking.
+type BuildResult struct {
+	Agent *agentcore.Agent
+	Guard *reminder.ReadingGuard
+	Mode  AgentMode
+}
+
+// BuildAgent assembles the main tarot reading agent with all tools
+// and a StopGuard that ensures readings are completed properly.
+func BuildAgent(model *llm.LiteLLMAdapter, s *store.Store, mode AgentMode) *BuildResult {
+	prompt := systemPromptPro
+	if mode == ModeCasual {
+		prompt = systemPromptCasual
+	}
+
+	guard, guardFunc := reminder.NewReadingGuard()
+
+	agent := agentcore.NewAgent(
+		agentcore.WithModel(model),
+		agentcore.WithSystemPrompt(prompt),
+		agentcore.WithTools(
+			tools.GetCardMeaningTool(s),
+			tools.GetSpreadLayoutTool(s),
+			tools.GetDisclaimerTool(),
+			tools.SaveReadingTool(s),
+		),
+		agentcore.WithMaxTurns(15),
+		agentcore.WithStopGuard(guardFunc),
+		agentcore.WithOnMessage(func(msg agentcore.AgentMessage) {
+			slog.Debug("agent message",
+				"role", string(msg.GetRole()),
+				"content_len", len(msg.TextContent()),
+			)
+		}),
+	)
+
+	return &BuildResult{
+		Agent: agent,
+		Guard: guard,
+		Mode:  mode,
+	}
+}
+```
+
+- [ ] **Step 4: 删除 system.md**
+
+```bash
+rm internal/agents/prompts/system.md
+```
+
+- [ ] **Step 5: 验证编译**
+
+Run: `cd D:/Mycase/tarot-agent && go build ./...`
+Expected: 编译通过（所有引用 systemPrompt 的地方已替换为新变量）
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add internal/agents/
+git commit -m "feat(agents): 双 Prompt 架构——专业版 + 通俗版"
+```
+
+---
+
+## Task 8: Config + 启动集成
+
+**Files:**
+- Modify: `internal/bootstrap/bootstrap.go`
+- Modify: `internal/bootstrap/setup.go`
+- Modify: `cmd/tarot-agent/main.go`
+
+- [ ] **Step 1: Config 新增 Mode 字段**
+
+在 `internal/bootstrap/bootstrap.go` 的 `Config` struct 中新增：
+
+```go
+type Config struct {
+	// LLM settings
+	APIKey  string
+	BaseURL string
+	Model   string
+
+	// App settings
+	LogLevel string
+	Mode     string // "professional" 或 "casual"
+}
+```
+
+在 `DefaultConfig()` 中设置默认值：
+
+```go
+func DefaultConfig() *Config {
+	return &Config{
+		Model:    defaultModel,
+		BaseURL:  defaultBaseURL,
+		LogLevel: defaultLogLevel,
+		Mode:     "professional",
+	}
+}
+```
+
+在 `LoadConfig()` 的 Layer 1（config file）中新增：
+
+```go
+if fc.Mode != "" {
+    cfg.Mode = fc.Mode
+}
+```
+
+新增环境变量 Layer 2：
+
+```go
+if v := os.Getenv("TAROT_MODE"); v != "" {
+    cfg.Mode = v
+}
+```
+
+- [ ] **Step 2: fileConfig 新增 Mode 字段**
+
+在 `setup.go` 的 `fileConfig` struct 中新增：
+
+```go
+type fileConfig struct {
+	APIKey  string `json:"api_key"`
+	BaseURL string `json:"base_url,omitempty"`
+	Model   string `json:"model,omitempty"`
+	Mode    string `json:"mode,omitempty"`
+}
+```
+
+- [ ] **Step 3: 首次向导新增模式选择**
+
+在 `RunSetup()` 函数中，API Key 输入后、保存前，新增：
+
+```go
+fmt.Println()
+fmt.Println("  选择解读模式：")
+fmt.Println("    1. 专业模式 — 包含元素、占星、数字等深度分析")
+fmt.Println("    2. 轻松模式 — 温暖对话式解读，不使用专业术语")
+fmt.Print("  请选择 [1/2]（默认 1）：> ")
+
+modeInput, _ := reader.ReadString('\n')
+modeInput = strings.TrimSpace(modeInput)
+mode := "professional"
+if modeInput == "2" {
+    mode = "casual"
+}
+```
+
+在 `fileConfig` 中赋值：
+
+```go
+fc := &fileConfig{
+    APIKey:  apiKey,
+    BaseURL: defaultBaseURL,
+    Model:   defaultModel,
+    Mode:    mode,
+}
+```
+
+在返回的 Config 中赋值：
+
+```go
+return &Config{
+    APIKey:   fc.APIKey,
+    BaseURL:  fc.BaseURL,
+    Model:    fc.Model,
+    LogLevel: defaultLogLevel,
+    Mode:     fc.Mode,
+}, nil
+```
+
+- [ ] **Step 4: main.go 支持 --mode 命令行参数**
+
+在 `run()` 函数开头（config 加载之前）解析命令行参数：
+
+```go
+func run() error {
+	// Parse command-line flags
+	modeFlag := flag.String("mode", "", "reading mode: 'pro' or 'casual'")
+	flag.Parse()
+
+	var cfg *bootstrap.Config
+
+	// ... existing setup/config loading ...
+
+	// Command-line mode overrides config
+	if *modeFlag != "" {
+		switch *modeFlag {
+		case "pro":
+			cfg.Mode = "professional"
+		case "casual":
+			cfg.Mode = "casual"
+		default:
+			return fmt.Errorf("invalid mode %q: use 'pro' or 'casual'", *modeFlag)
+		}
+	}
+```
+
+需要在文件顶部 import `"flag"`。
+
+修改 `BuildAgent` 调用：
+
+```go
+mode := agents.ParseMode(cfg.Mode)
+result := agents.BuildAgent(model, s, mode)
+slog.Info("agent built", "mode", mode.Label())
+```
+
+- [ ] **Step 5: 验证编译**
+
+Run: `cd D:/Mycase/tarot-agent && go build ./...`
+Expected: 编译通过
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add internal/bootstrap/ cmd/
+git commit -m "feat(config): 新增 Mode 配置、首次向导模式选择、--mode 命令行参数"
+```
+
+---
+
+## Task 9: TUI 模式标识
+
+**Files:**
+- Modify: `internal/host/tui/model.go`
+- Modify: `internal/host/tui/render.go`
+- Modify: `internal/host/tui/app.go`
+
+- [ ] **Step 1: Model 新增 mode 字段**
+
+在 `Model` struct 中新增：
+
+```go
+type Model struct {
+	// ... existing fields ...
+	mode string // "专业模式" 或 "轻松模式"
+}
+```
+
+修改 `NewModel` 签名：
+
+```go
+func NewModel(agent *agentcore.Agent, guard *reminder.ReadingGuard, s *store.Store, mode string) *Model {
+```
+
+在返回值中赋值：
+
+```go
+return &Model{
+    // ... existing fields ...
+    mode: mode,
+}
+```
+
+- [ ] **Step 2: renderStatusBar 显示模式标识**
+
+修改 `renderStatusBar` 函数，在 left 和 center 之间插入模式标识：
+
+```go
+func renderStatusBar(m *Model) string {
+	w := m.layout.Width
+	left := lipgloss.NewStyle().Foreground(colorPrimary).Bold(true).Render("✦ 星语 Tarot Agent")
+
+	modeTag := ""
+	if m.mode != "" {
+		modeTag = lipgloss.NewStyle().Foreground(colorAccent).Render("[" + m.mode + "]")
+	}
+
+	center := ""
+	if name := spreadDisplayName(m.spreadType); name != "" {
+		center = lipgloss.NewStyle().Foreground(colorMuted).Render("牌阵: " + name)
+	}
+
+	// ... rest of layout calculation, include modeTag in the spacing ...
+}
+```
+
+调整布局计算，将 modeTag 纳入 left 区域或单独占位。
+
+- [ ] **Step 3: app.go Run() 传递 mode**
+
+```go
+func Run(agent *agentcore.Agent, guard *reminder.ReadingGuard, s *store.Store, mode string) error {
+	m := NewModel(agent, guard, s, mode)
+	// ... rest unchanged ...
+}
+```
+
+- [ ] **Step 4: main.go 传递 mode label**
+
+```go
+return tui.Run(result.Agent, result.Guard, s, result.Mode.Label())
+```
+
+- [ ] **Step 5: 运行测试确认无破坏**
+
+Run: `cd D:/Mycase/tarot-agent && go test ./internal/host/tui/... -v -count=1`
+Expected: 所有现有 TUI 测试 PASS
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add internal/host/tui/ cmd/
+git commit -m "feat(tui): 状态栏显示当前解读模式标识"
+```
+
+---
+
+## Task 10: 最终验证
+
+- [ ] **Step 1: 全量构建**
+
+Run: `cd D:/Mycase/tarot-agent && go build ./...`
+Expected: 编译通过
+
+- [ ] **Step 2: 全量测试**
+
+Run: `cd D:/Mycase/tarot-agent && go test ./... -count=1`
+Expected: 所有测试 PASS
+
+- [ ] **Step 3: 测试覆盖率**
+
+Run: `cd D:/Mycase/tarot-agent && go test ./... -coverprofile=coverage.out && go tool cover -func=coverage.out | tail -1`
+Expected: 总覆盖率 ≥ 80%
+
+- [ ] **Step 4: 手动冒烟测试**
+
+Run: `cd D:/Mycase/tarot-agent && go run ./cmd/tarot-agent --mode pro`
+验证：
+- 状态栏显示 `[专业模式]`
+- 抽牌后 agent 能使用新增的元素/占星/数理数据
+
+Run: `cd D:/Mycase/tarot-agent && go run ./cmd/tarot-agent --mode casual`
+验证：
+- 状态栏显示 `[轻松模式]`
+- 解读风格明显不同（更口语化、更短、不使用专业术语）
+
+- [ ] **Step 5: 最终 Commit**
+
+```bash
+git add -A
+git commit -m "feat: 塔罗专业性增强完成——数据充实 + 双 Prompt + 全局知识"
+```
