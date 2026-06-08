@@ -64,7 +64,7 @@ func run() error {
 	slog.Info("model initialized", "model", cfg.Model)
 
 	// Build agent
-	result := agents.BuildAgent(model, s)
+	result := agents.BuildAgent(model, s, agents.ModeProfessional)
 	slog.Info("agent built")
 
 	// Signal handling
