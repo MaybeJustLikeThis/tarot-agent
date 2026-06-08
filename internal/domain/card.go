@@ -41,7 +41,43 @@ type Card struct {
 	ReversedKeywords []string  `json:"reversed_keywords"`
 	UprightMeaning  string     `json:"upright_meaning"`
 	ReversedMeaning string     `json:"reversed_meaning"`
-	ImageFile       string     `json:"image_file"`
+	ImageFile        string           `json:"image_file"`
+	// Enriched fields (added for professional readings)
+	Element          string           `json:"element,omitempty"`
+	Astrology        *AstrologyInfo   `json:"astrology,omitempty"`
+	Numerology       *NumerologyInfo  `json:"numerology,omitempty"`
+	Imagery          string           `json:"imagery,omitempty"`
+	KeywordsContext  *KeywordsContext  `json:"keywords_context,omitempty"`
+	CourtRole        *CourtRole       `json:"court_role,omitempty"`
+}
+
+// AstrologyInfo holds astrological correspondences for a card.
+type AstrologyInfo struct {
+	Planet string `json:"planet,omitempty"`
+	Zodiac string `json:"zodiac,omitempty"`
+	Note   string `json:"note,omitempty"`
+}
+
+// NumerologyInfo holds numerological significance of a card.
+type NumerologyInfo struct {
+	Number  int    `json:"number"`
+	Meaning string `json:"meaning"`
+	Note    string `json:"note,omitempty"`
+}
+
+// KeywordsContext holds scenario-specific keywords.
+type KeywordsContext struct {
+	Love   []string `json:"love"`
+	Career []string `json:"career"`
+	Growth []string `json:"growth"`
+}
+
+// CourtRole describes the special role of court cards (Page/Knight/Queen/King).
+type CourtRole struct {
+	Archetype   string `json:"archetype"`
+	Personality string `json:"personality"`
+	AsPerson    string `json:"as_person"`
+	AsMessage   string `json:"as_message"`
 }
 
 // Position describes a named position within a spread.
