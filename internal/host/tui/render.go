@@ -11,6 +11,11 @@ func renderStatusBar(m *Model) string {
 	w := m.layout.Width
 	left := lipgloss.NewStyle().Foreground(colorPrimary).Bold(true).Render("✦ 星语 Tarot Agent")
 
+	modeTag := ""
+	if m.mode != "" {
+		modeTag = lipgloss.NewStyle().Foreground(colorAccent).Render("[" + m.mode + "]")
+	}
+
 	center := ""
 	if name := spreadDisplayName(m.spreadType); name != "" {
 		center = lipgloss.NewStyle().Foreground(colorMuted).Render("牌阵: " + name)
@@ -25,14 +30,16 @@ func renderStatusBar(m *Model) string {
 	}
 
 	leftW := lipgloss.Width(left)
+	modeW := lipgloss.Width(modeTag)
 	centerW := lipgloss.Width(center)
 	rightW := lipgloss.Width(right)
 
 	innerW := w - 2
-	gap1 := maxI(2, (innerW-leftW-centerW-rightW)/2)
-	gap2 := maxI(1, innerW-leftW-gap1-centerW-rightW)
+	gap1 := maxI(2, (innerW-leftW-modeW-centerW-rightW)/3)
+	gap2 := maxI(1, (innerW-leftW-modeW-gap1-centerW-rightW)/2)
+	gap3 := maxI(1, innerW-leftW-modeW-gap1-gap2-centerW-rightW)
 
-	bar := " " + left + strings.Repeat(" ", gap1) + center + strings.Repeat(" ", gap2) + right
+	bar := " " + left + strings.Repeat(" ", gap1) + modeTag + strings.Repeat(" ", gap2) + center + strings.Repeat(" ", gap3) + right
 
 	return lipgloss.NewStyle().
 		Width(w).

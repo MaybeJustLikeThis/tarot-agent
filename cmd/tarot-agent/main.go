@@ -99,5 +99,5 @@ func run() error {
 	_ = ctx
 
 	// Launch TUI
-	return tui.Run(result.Agent, result.Guard, s)
+	return tui.Run(result.Agent, result.Guard, s, result.Mode.Label())
 }

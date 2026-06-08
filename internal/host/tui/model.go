@@ -101,6 +101,7 @@ type Model struct {
 	height    int
 
 	// Shared state accessible by all states
+	mode      string // "专业模式" or "轻松模式"
 	userInput   string
 	spreadType  string
 	drawResult  *domain.DrawResult
@@ -110,7 +111,7 @@ type Model struct {
 	err         error
 }
 
-func NewModel(agent *agentcore.Agent, guard *reminder.ReadingGuard, s *store.Store) *Model {
+func NewModel(agent *agentcore.Agent, guard *reminder.ReadingGuard, s *store.Store, mode string) *Model {
 	ta := textarea.New()
 	ta.Placeholder = "说说你的情况和想问的问题..."
 	ta.Focus()
@@ -130,6 +131,7 @@ func NewModel(agent *agentcore.Agent, guard *reminder.ReadingGuard, s *store.Sto
 		state:     &InputState{},
 		bridge:    newAgentBridge(agent, guard),
 		store:     s,
+		mode:      mode,
 		input:     ta,
 		readingVP: vp,
 		spinner:   sp,
