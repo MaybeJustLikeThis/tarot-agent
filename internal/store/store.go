@@ -29,6 +29,9 @@ var minorPentaclesJSON []byte
 //go:embed assets/spreads/spreads.json
 var spreadsJSON []byte
 
+//go:embed assets/knowledge/elements.json
+var elementsJSON []byte
+
 // MajorArcanaJSON returns the embedded major arcana JSON bytes.
 func MajorArcanaJSON() []byte { return majorArcanaJSON }
 
@@ -46,6 +49,9 @@ func MinorPentaclesJSON() []byte { return minorPentaclesJSON }
 
 // SpreadsJSON returns the embedded spreads JSON bytes.
 func SpreadsJSON() []byte { return spreadsJSON }
+
+// ElementsJSON returns the embedded elements knowledge JSON bytes.
+func ElementsJSON() []byte { return elementsJSON }
 
 // IO provides atomic file read/write operations.
 type IO struct {
@@ -97,6 +103,28 @@ func (io *IO) WriteJSON(path string, data any) error {
 		return fmt.Errorf("rename %s to %s: %w", tmpPath, path, err)
 	}
 	return nil
+}
+
+// SuitInfo describes a tarot suit's element and domain.
+type SuitInfo struct {
+	Element string `json:"element"`
+	Domain  string `json:"domain"`
+}
+
+// ElementKnowledge holds global tarot knowledge about elements, suits, and numerology.
+type ElementKnowledge struct {
+	Interactions map[string]string  `json:"interactions"`
+	SuitMeanings map[string]SuitInfo `json:"suit_meanings"`
+	Numerology   map[string]string  `json:"numerology"`
+}
+
+// NewElementKnowledge loads element knowledge from JSON data.
+func NewElementKnowledge(jsonData []byte) (*ElementKnowledge, error) {
+	var ek ElementKnowledge
+	if err := json.Unmarshal(jsonData, &ek); err != nil {
+		return nil, fmt.Errorf("load element knowledge: %w", err)
+	}
+	return &ek, nil
 }
 
 // CardStore provides read-only access to tarot card data.
@@ -205,6 +233,7 @@ type Store struct {
 	Cards    *CardStore
 	Spreads  *SpreadStore
 	Readings *ReadingStore
+	Elements *ElementKnowledge
 }
 
 // New creates and initializes all sub-stores from embedded data.
@@ -227,6 +256,11 @@ func New() (*Store, error) {
 		return nil, fmt.Errorf("init spread store: %w", err)
 	}
 
+	elements, err := NewElementKnowledge(elementsJSON)
+	if err != nil {
+		return nil, fmt.Errorf("init element knowledge: %w", err)
+	}
+
 	readingsPath, err := DefaultReadingsPath()
 	if err != nil {
 		return nil, fmt.Errorf("get readings path: %w", err)
@@ -237,5 +271,6 @@ func New() (*Store, error) {
 		Cards:    cards,
 		Spreads:  spreads,
 		Readings: NewReadingStore(readingsPath),
+		Elements: elements,
 	}, nil
 }
