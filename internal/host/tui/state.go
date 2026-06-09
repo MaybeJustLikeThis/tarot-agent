@@ -472,7 +472,7 @@ func renderReadingView(m *Model) StateView {
 }
 
 // renderSplitView renders the split view (FollowUpState, ChatState).
-// Reading viewport on top, chat viewport on bottom.
+// Reading viewport on top, chat viewport on bottom — each constrained to its own height.
 func renderSplitView(m *Model) StateView {
 	left := renderPanelTitle("牌面", colorAccent) + "\n"
 	if m.drawResult != nil {
@@ -481,20 +481,29 @@ func renderSplitView(m *Model) StateView {
 		left += renderCentered(m.layout.BodyHeight-1, styleMuted.Render("等待抽牌..."))
 	}
 
-	// Right panel: reading (top) + separator + chat (bottom)
-	readingPart := renderPanelTitle("解读", colorPrimary) + "\n" +
-		m.readingVP.View()
+	// Reading section: title + viewport, constrained to readingVP.Height
+	readingTitle := renderPanelTitle("解读", colorPrimary)
+	readingContent := m.readingVP.View()
+	readingPart := lipgloss.NewStyle().
+		Width(m.layout.RightWidth).
+		Height(m.readingVP.Height + 1). // +1 for title line
+		Render(readingTitle + "\n" + readingContent)
 
+	// Separator
+	chatSep := separatorStyle.Render(strings.Repeat("─", m.layout.RightWidth-2))
+
+	// Chat section: title + viewport, constrained to chatVP.Height
+	chatTitle := renderPanelTitle("对话", colorAccent)
 	chatContent := m.chatVP.View()
-	if chatContent == "" || len(m.chatMessages) == 0 {
+	if len(m.chatMessages) == 0 && m.chatStreamBuf.Len() == 0 {
 		chatContent = styleMuted.Italic(true).Render("  解读后可以继续追问...")
 	}
 	chatHint := styleSubtle.Render("  ↑↓/jk 滚动")
-	chatPart := renderPanelTitle("对话", colorAccent) + "\n" +
-		chatContent + "\n" + chatHint
+	chatPart := lipgloss.NewStyle().
+		Width(m.layout.RightWidth).
+		Height(m.chatVP.Height + 2). // +2 for title + hint
+		Render(chatTitle + "\n" + chatContent + "\n" + chatHint)
 
-	chatSep := separatorStyle.Render(strings.Repeat("─", m.layout.RightWidth-2))
 	right := readingPart + "\n" + chatSep + "\n" + chatPart
-
 	return StateView{Left: left, Right: right}
 }

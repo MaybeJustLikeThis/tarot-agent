@@ -84,16 +84,18 @@ func (m *Model) layoutHeights() {
 	readingH := bodyH - 3 // -3 for panel title + scroll hint
 	chatH := 0
 
-	// In FollowUpState/ChatState, split the right panel: 60% reading, 40% chat
+	// In FollowUpState/ChatState, split the right panel: reading on top, chat on bottom.
+	// Chat section needs: title(1) + viewport + hint(1) + separator(1) = vp + 3 lines
 	switch m.state.(type) {
 	case *FollowUpState, *ChatState:
-		readingH = bodyH * 60 / 100
-		if readingH < 4 {
-			readingH = 4
-		}
-		chatH = bodyH - readingH - 1 // -1 for separator between reading and chat
+		const chatOverhead = 4 // title + hint + separator + margin
+		chatH = bodyH * 35 / 100
 		if chatH < 4 {
 			chatH = 4
+		}
+		readingH = bodyH - chatH - chatOverhead
+		if readingH < 4 {
+			readingH = 4
 		}
 	}
 
