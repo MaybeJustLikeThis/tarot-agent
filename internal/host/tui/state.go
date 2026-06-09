@@ -44,7 +44,7 @@ func (s *InputState) Update(m *Model, msg tea.Msg) (State, tea.Cmd) {
 				m.historyReadings = readings
 				m.historyCursor = 0
 				m.drawResult = nil
-				m.reading.Reset()
+				m.resetConversation()
 				if len(readings) > 0 {
 					m.readingVP.SetContent(renderMarkdown(readings[0].Interpretation, m.readingVP.Width-2))
 				}
@@ -52,7 +52,7 @@ func (s *InputState) Update(m *Model, msg tea.Msg) (State, tea.Cmd) {
 			}
 		case "ctrl+d":
 			m.userInput = "今日指引"
-			m.reading.Reset()
+			m.resetConversation()
 			m.err = nil
 			return startReveal(m, "single")
 		case "enter":
@@ -64,9 +64,9 @@ func (s *InputState) Update(m *Model, msg tea.Msg) (State, tea.Cmd) {
 				return s, tea.Quit
 			}
 			m.userInput = input
-			m.reading.Reset()
+			m.resetConversation()
 			m.err = nil
-			m.readingVP.SetContent("") // clear viewport for new reading
+			m.readingVP.SetContent("")
 			return &SpreadState{}, nil
 		}
 	}
@@ -130,7 +130,7 @@ func startReveal(m *Model, spreadType string) (State, tea.Cmd) {
 	m.revealIndex = 0
 	m.bridge.guard.Reset()
 	m.bridge.guard.SetExpectedCards(int32(len(result.Cards)))
-	m.reading.Reset()
+	m.resetConversation()
 	m.toolCalls = nil
 	m.err = nil
 
@@ -210,8 +210,8 @@ type ReadingState struct{}
 func (s *ReadingState) Update(m *Model, msg tea.Msg) (State, tea.Cmd) {
 	switch msg := msg.(type) {
 	case agentDeltaMsg:
-		m.reading.WriteString(msg.text)
-		m.readingVP.SetContent(renderMarkdown(m.reading.String(), m.readingVP.Width-2))
+		m.streamBuf.WriteString(msg.text)
+		m.readingVP.SetContent(m.renderConversation(true))
 		m.readingVP.GotoBottom()
 		return s, m.bridge.nextEvent()
 
@@ -221,10 +221,20 @@ func (s *ReadingState) Update(m *Model, msg tea.Msg) (State, tea.Cmd) {
 
 	case agentEndMsg:
 		m.bridge.cleanup()
+		// Finalize: move stream buffer into messages
+		if m.streamBuf.Len() > 0 {
+			m.messages = append(m.messages, ChatMessage{Role: "assistant", Content: m.streamBuf.String()})
+			m.streamBuf.Reset()
+		}
 		return &FollowUpState{}, nil
 
 	case agentErrMsg:
 		m.bridge.cleanup()
+		// Finalize partial response on error too
+		if m.streamBuf.Len() > 0 {
+			m.messages = append(m.messages, ChatMessage{Role: "assistant", Content: m.streamBuf.String()})
+			m.streamBuf.Reset()
+		}
 		m.err = msg.err
 		return &FollowUpState{}, nil
 	}
@@ -277,14 +287,17 @@ func (s *FollowUpState) Update(m *Model, msg tea.Msg) (State, tea.Cmd) {
 			if input == "" {
 				m.bridge.clearMessages()
 				m.input.Reset()
-				m.reading.Reset()
-				m.readingVP.SetContent("") // clear old reading from viewport
+				m.resetConversation()
+				m.readingVP.SetContent("")
 				return &InputState{}, nil
 			}
 			if isExitCmd(input) {
 				return s, tea.Quit
 			}
-			m.reading.Reset()
+			// Add user message to conversation and start new reading
+			m.appendUserMessage(input)
+			m.streamBuf.Reset()
+			m.input.Reset()
 			m.toolCalls = nil
 			m.err = nil
 			m.bridge.setup(input)

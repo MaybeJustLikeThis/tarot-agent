@@ -89,6 +89,12 @@ func (m *Model) layoutHeights() {
 	}
 }
 
+// ChatMessage represents a single message in the conversation.
+type ChatMessage struct {
+	Role    string // "user" or "assistant"
+	Content string
+}
+
 // Model is the main TUI model. Thin orchestrator — state logic lives in state.go.
 type Model struct {
 	state  State
@@ -103,12 +109,13 @@ type Model struct {
 	height    int
 
 	// Shared state accessible by all states
-	mode      string // "专业模式" or "轻松模式"
+	mode        string // "专业模式" or "轻松模式"
 	userInput   string
 	spreadType  string
 	drawResult  *domain.DrawResult
 	revealIndex int
-	reading     strings.Builder
+	messages    []ChatMessage // conversation history (user + assistant)
+	streamBuf   strings.Builder // buffer for current streaming assistant message
 	toolCalls   []string
 	err         error
 
@@ -123,8 +130,8 @@ func NewModel(agent *agentcore.Agent, guard *reminder.ReadingGuard, s *store.Sto
 	ta.Focus()
 	ta.CharLimit = 2000
 	ta.SetWidth(80)
-	ta.SetHeight(1)
-	ta.MaxHeight = 3
+	ta.SetHeight(2)
+	ta.MaxHeight = 6
 	ta.ShowLineNumbers = false
 
 	vp := viewport.New(40, 10)
@@ -280,6 +287,34 @@ func (m *Model) spinnerOn() bool {
 		return true
 	}
 	return false
+}
+
+// resetConversation clears all messages and stream buffer.
+func (m *Model) resetConversation() {
+	m.messages = nil
+	m.streamBuf.Reset()
+}
+
+// appendUserMessage adds a user message to the conversation.
+func (m *Model) appendUserMessage(text string) {
+	m.messages = append(m.messages, ChatMessage{Role: "user", Content: text})
+}
+
+// renderConversation renders the full conversation history as markdown text.
+// If streaming is true, includes the current stream buffer as the latest assistant message.
+func (m *Model) renderConversation(streaming bool) string {
+	var b strings.Builder
+	for _, msg := range m.messages {
+		if msg.Role == "user" {
+			b.WriteString("> **你**：" + msg.Content + "\n\n")
+		} else {
+			b.WriteString(msg.Content + "\n\n")
+		}
+	}
+	if streaming && m.streamBuf.Len() > 0 {
+		b.WriteString(m.streamBuf.String())
+	}
+	return renderMarkdown(b.String(), m.readingVP.Width-2)
 }
 
 // lipglossHeight measures the rendered height of a string.

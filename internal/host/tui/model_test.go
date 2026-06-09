@@ -217,8 +217,8 @@ func TestView_ReadingState_BothPanels(t *testing.T) {
 	result, _ := tools.DrawCards(m.store, "three_card")
 	m.drawResult = result
 	m.revealIndex = len(result.Cards)
-	m.reading.WriteString("测试解读内容很长很长很长很长很长很长很长很长很长很长")
-	m.readingVP.SetContent(m.reading.String())
+	m.streamBuf.WriteString("测试解读内容很长很长很长很长很长很长很长很长很长很长")
+	m.readingVP.SetContent(m.streamBuf.String())
 
 	m.state = &ReadingState{}
 	view := m.View()
@@ -261,8 +261,8 @@ func TestView_NoLineExceedsWidth(t *testing.T) {
 	result, _ := tools.DrawCards(m.store, "three_card")
 	m.drawResult = result
 	m.revealIndex = len(result.Cards)
-	m.reading.WriteString("测试解读内容")
-	m.readingVP.SetContent(m.reading.String())
+	m.streamBuf.WriteString("测试解读内容")
+	m.readingVP.SetContent(m.streamBuf.String())
 
 	m.state = &ReadingState{}
 	view := m.View()
@@ -308,8 +308,8 @@ func TestView_FullFlow_NoPanic(t *testing.T) {
 	_ = m.View()
 
 	// 4. Transition to ReadingState
-	m.reading.WriteString("这是一段很长的解读内容，模拟AI生成的解读文本。")
-	m.readingVP.SetContent(m.reading.String())
+	m.streamBuf.WriteString("这是一段很长的解读内容，模拟AI生成的解读文本。")
+	m.readingVP.SetContent(m.streamBuf.String())
 	m.state = &ReadingState{}
 	_ = m.View()
 
@@ -319,7 +319,7 @@ func TestView_FullFlow_NoPanic(t *testing.T) {
 
 	// 6. Back to InputState (new reading)
 	m.drawResult = nil
-	m.reading.Reset()
+	m.resetConversation()
 	m.state = &InputState{}
 	_ = m.View()
 }
