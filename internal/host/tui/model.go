@@ -26,8 +26,8 @@ type Layout struct {
 	RightWidth int
 }
 
-// layoutHeights measures actual rendered heights and calculates body height.
-// Follows ainovel-cli pattern: render first, measure, then calculate remainder.
+// layoutHeights calculates layout dimensions using fixed input heights
+// to prevent viewport jumping when textarea content changes.
 func (m *Model) layoutHeights() {
 	w := m.width
 	h := m.height
@@ -36,22 +36,24 @@ func (m *Model) layoutHeights() {
 		return
 	}
 
-	// Measure actual rendered heights
-	topBar := renderStatusBar(m)
-	topH := lipglossHeight(topBar)
+	// Fixed heights — never measure dynamically to avoid layout jumps.
+	const (
+		topH  = 1 // status bar always 1 line
+		sepH  = 1 // separator between body and input
+		inputHDefault = 8 // label(1) + textarea(max 6) + hint(1)
+		inputHSpread  = 5 // label(1) + 3 options + hint(1)
+		inputHHistory = 1 // single label line
+	)
 
-	var inputBar string
+	var inputH int
 	switch m.state.(type) {
 	case *SpreadState:
-		inputBar = "选择牌阵 (1/2/3)：\n" + renderSpreadOptions(m)
+		inputH = inputHSpread
 	case *HistoryState:
-		inputBar = "浏览历史记录（↑↓ 选择 · esc 返回）"
+		inputH = inputHHistory
 	default:
-		inputBar = renderInputZone(m, "说说你的情况和想问的问题：")
+		inputH = inputHDefault
 	}
-	inputH := lipglossHeight(inputBar)
-
-	sepH := 1 // one separator between body and input
 
 	bodyH := h - topH - inputH - sepH
 	if bodyH < 5 {
@@ -82,8 +84,9 @@ func (m *Model) layoutHeights() {
 	readingH := bodyH - 3 // -3 for panel title + scroll hint
 	chatH := 0
 
-	// In FollowUpState, split the right panel: 60% reading, 40% chat
-	if _, isFollowUp := m.state.(*FollowUpState); isFollowUp {
+	// In FollowUpState/ChatState, split the right panel: 60% reading, 40% chat
+	switch m.state.(type) {
+	case *FollowUpState, *ChatState:
 		readingH = bodyH * 60 / 100
 		if readingH < 4 {
 			readingH = 4
@@ -225,19 +228,7 @@ func (m *Model) View() string {
 		return "Loading..."
 	}
 
-	// Re-sync viewports every frame
-	readingH := m.layout.BodyHeight - 3
-	chatH := 0
-	if _, isFollowUp := m.state.(*FollowUpState); isFollowUp {
-		readingH = m.layout.BodyHeight * 60 / 100
-		if readingH < 4 {
-			readingH = 4
-		}
-		chatH = m.layout.BodyHeight - readingH - 1
-		if chatH < 4 {
-			chatH = 4
-		}
-	}
+	// Re-sync viewport widths (heights are stable from layoutHeights)
 	vpW := m.layout.RightWidth - 6
 	if vpW < 10 {
 		vpW = 10
@@ -245,14 +236,8 @@ func (m *Model) View() string {
 	if m.readingVP.Width != vpW {
 		m.readingVP.Width = vpW
 	}
-	if m.readingVP.Height != readingH {
-		m.readingVP.Height = readingH
-	}
 	if m.chatVP.Width != vpW {
 		m.chatVP.Width = vpW
-	}
-	if m.chatVP.Height != chatH {
-		m.chatVP.Height = chatH
 	}
 
 	var b strings.Builder
