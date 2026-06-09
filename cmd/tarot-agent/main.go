@@ -57,6 +57,7 @@ func run() error {
 	// Initialize logger
 	bootstrap.InitLogger(cfg.LogLevel)
 	slog.Info("starting tarot-agent",
+		"provider", cfg.Provider,
 		"model", cfg.Model,
 		"base_url", cfg.BaseURL,
 	)
@@ -76,7 +77,7 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("init model: %w", err)
 	}
-	slog.Info("model initialized", "model", cfg.Model)
+	slog.Info("model initialized", "provider", cfg.Provider, "model", cfg.Model)
 
 	// Build agent
 	mode := agents.ParseMode(cfg.Mode)

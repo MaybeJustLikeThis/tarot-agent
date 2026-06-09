@@ -50,11 +50,21 @@ go run ./cmd/tarot-agent  # 或直接运行源码
 
 ## 自定义 LLM
 
-兼容所有 OpenAI API 格式的模型：
+支持 DeepSeek、OpenAI、Anthropic 三种 AI 服务商。首次运行会引导选择，之后可通过环境变量切换：
 
 ```bash
-export TAROT_BASE_URL="https://api.openai.com/v1"
+# 使用 OpenAI
+export TAROT_PROVIDER="openai"
+export TAROT_API_KEY="sk-xxx"
 export TAROT_MODEL="gpt-4o"
+
+# 使用 Anthropic
+export TAROT_PROVIDER="anthropic"
+export TAROT_API_KEY="sk-ant-xxx"
+export TAROT_MODEL="claude-sonnet-4-20250514"
+
+# 使用自建代理
+export TAROT_BASE_URL="https://your-proxy.com/v1"
 export TAROT_API_KEY="sk-xxx"
 ```
 
@@ -62,9 +72,10 @@ export TAROT_API_KEY="sk-xxx"
 
 | 变量 | 说明 | 默认值 |
 |------|------|--------|
-| `DEEPSEEK_API_KEY` | API Key | 无（首次引导设置） |
-| `TAROT_BASE_URL` | API 地址 | `https://api.deepseek.com` |
-| `TAROT_MODEL` | 模型名 | `deepseek-chat` |
+| `TAROT_PROVIDER` | AI 服务商：`deepseek` / `openai` / `anthropic` | `deepseek` |
+| `TAROT_API_KEY` | API Key | 无（首次引导设置） |
+| `TAROT_BASE_URL` | API 地址 | 按 provider 自动选择 |
+| `TAROT_MODEL` | 模型名 | 按 provider 自动选择 |
 | `TAROT_MODE` | 解读模式：`professional` / `casual` | `professional` |
 
 ## License

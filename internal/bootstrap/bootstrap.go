@@ -11,9 +11,10 @@ import (
 // Config holds application configuration.
 type Config struct {
 	// LLM settings
-	APIKey  string
-	BaseURL string
-	Model   string
+	Provider string // "openai", "deepseek", "anthropic"
+	APIKey   string
+	BaseURL  string
+	Model    string
 
 	// App settings
 	LogLevel string
@@ -21,16 +22,16 @@ type Config struct {
 }
 
 const (
-	defaultModel    = "deepseek-chat"
-	defaultBaseURL  = "https://api.deepseek.com"
 	defaultLogLevel = "info"
 )
 
-// DefaultConfig returns a Config with sensible defaults.
+// DefaultConfig returns a Config with sensible defaults (DeepSeek).
 func DefaultConfig() *Config {
+	pd := knownProviders[defaultProvider]
 	return &Config{
-		Model:    defaultModel,
-		BaseURL:  defaultBaseURL,
+		Provider: pd.Name,
+		Model:    pd.DefaultModel,
+		BaseURL:  pd.DefaultURL,
 		LogLevel: defaultLogLevel,
 		Mode:     "professional",
 	}
@@ -45,6 +46,9 @@ func LoadConfig() (*Config, error) {
 	if fc, err := loadFileConfig(); err != nil {
 		slog.Warn("failed to load config file, using env vars only", "error", err)
 	} else if fc != nil {
+		if fc.Provider != "" {
+			cfg.Provider = fc.Provider
+		}
 		if fc.APIKey != "" {
 			cfg.APIKey = fc.APIKey
 		}
@@ -59,7 +63,16 @@ func LoadConfig() (*Config, error) {
 		}
 	}
 
+	// Migration: existing config without provider field — infer from BaseURL.
+	if cfg.Provider == "" && cfg.BaseURL != "" {
+		cfg.Provider = inferProvider(cfg.BaseURL)
+		slog.Info("inferred provider from base_url", "provider", cfg.Provider, "base_url", cfg.BaseURL)
+	}
+
 	// Layer 2: env vars (override file)
+	if v := os.Getenv("TAROT_PROVIDER"); v != "" {
+		cfg.Provider = v
+	}
 	if v := os.Getenv("TAROT_API_KEY"); v != "" {
 		cfg.APIKey = v
 	} else if v := os.Getenv("DEEPSEEK_API_KEY"); v != "" {
@@ -80,7 +93,7 @@ func LoadConfig() (*Config, error) {
 	}
 
 	if cfg.APIKey == "" {
-		return nil, fmt.Errorf("API key is required: set DEEPSEEK_API_KEY or TAROT_API_KEY environment variable")
+		return nil, fmt.Errorf("API key is required: set TAROT_API_KEY environment variable or run setup")
 	}
 
 	return cfg, nil
@@ -104,12 +117,12 @@ func InitLogger(level string) {
 
 // NewModel creates an LLM model from the configuration.
 func NewModel(cfg *Config) (*llm.LiteLLMAdapter, error) {
-	model, err := llm.NewModel("openai", cfg.Model,
+	model, err := llm.NewModel(cfg.Provider, cfg.Model,
 		llm.WithAPIKey(cfg.APIKey),
 		llm.WithBaseURL(cfg.BaseURL),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("create model %s: %w", cfg.Model, err)
+		return nil, fmt.Errorf("create model %s (%s): %w", cfg.Model, cfg.Provider, err)
 	}
 	return model, nil
 }

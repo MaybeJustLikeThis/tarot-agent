@@ -32,10 +32,11 @@ func configPath() (string, error) {
 
 // fileConfig is the JSON structure persisted to disk.
 type fileConfig struct {
-	APIKey  string `json:"api_key"`
-	BaseURL string `json:"base_url,omitempty"`
-	Model   string `json:"model,omitempty"`
-	Mode    string `json:"mode,omitempty"`
+	Provider string `json:"provider,omitempty"`
+	APIKey   string `json:"api_key"`
+	BaseURL  string `json:"base_url,omitempty"`
+	Model    string `json:"model,omitempty"`
+	Mode     string `json:"mode,omitempty"`
 }
 
 // loadFileConfig reads config from ~/.tarot-agent/config.json if it exists.
@@ -112,11 +113,44 @@ func RunSetup() (*Config, error) {
 	fmt.Println("  ║       星语 Tarot Agent — 首次设置      ║")
 	fmt.Println("  ╚═══════════════════════════════════════╝")
 	fmt.Println()
-	fmt.Println("  本工具需要 DeepSeek API Key 来驱动 AI 解读。")
-	fmt.Println("  获取方式：https://platform.deepseek.com/api_keys")
-	fmt.Println()
-	fmt.Print("  请粘贴你的 API Key（sk-xxx）：> ")
 
+	// Step 1: Provider selection
+	fmt.Println("  选择 AI 服务商：")
+	for i, key := range providerOrder {
+		pd := knownProviders[key]
+		fmt.Printf("    %d. %s\n", i+1, pd.Description)
+	}
+	fmt.Print("  请选择 [1/2/3]（默认 1）：> ")
+
+	providerInput, _ := reader.ReadString('\n')
+	providerInput = strings.TrimSpace(providerInput)
+	providerIdx := 0
+	if providerInput == "2" {
+		providerIdx = 1
+	} else if providerInput == "3" {
+		providerIdx = 2
+	}
+	providerKey := providerOrder[providerIdx]
+	pd := knownProviders[providerKey]
+
+	// Step 2: Base URL (with default from provider)
+	fmt.Printf("\n  API 地址 [%s]：> ", pd.DefaultURL)
+	baseURL, _ := reader.ReadString('\n')
+	baseURL = strings.TrimSpace(baseURL)
+	if baseURL == "" {
+		baseURL = pd.DefaultURL
+	}
+
+	// Step 3: Model (with default from provider)
+	fmt.Printf("  模型名 [%s]：> ", pd.DefaultModel)
+	model, _ := reader.ReadString('\n')
+	model = strings.TrimSpace(model)
+	if model == "" {
+		model = pd.DefaultModel
+	}
+
+	// Step 4: API Key with format validation
+	fmt.Printf("  请粘贴你的 API Key（%s）：> ", pd.KeyExample)
 	apiKey, err := reader.ReadString('\n')
 	if err != nil {
 		return nil, fmt.Errorf("read API key: %w", err)
@@ -125,7 +159,16 @@ func RunSetup() (*Config, error) {
 	if apiKey == "" {
 		return nil, fmt.Errorf("API key 不能为空")
 	}
+	if err := ValidateKeyFormat(providerKey, apiKey); err != nil {
+		fmt.Printf("  ⚠ %s\n", err)
+		fmt.Print("  是否仍要使用此 Key？[y/N]：> ")
+		confirm, _ := reader.ReadString('\n')
+		if strings.TrimSpace(strings.ToLower(confirm)) != "y" {
+			return nil, fmt.Errorf("已取消，请重新运行设置")
+		}
+	}
 
+	// Step 5: Reading mode
 	fmt.Println()
 	fmt.Println("  选择解读模式：")
 	fmt.Println("    1. 专业模式 — 包含元素、占星、数字等深度分析")
@@ -141,22 +184,25 @@ func RunSetup() (*Config, error) {
 
 	// Save to file
 	fc := &fileConfig{
-		APIKey:  apiKey,
-		BaseURL: defaultBaseURL,
-		Model:   defaultModel,
-		Mode:    mode,
+		Provider: providerKey,
+		APIKey:   apiKey,
+		BaseURL:  baseURL,
+		Model:    model,
+		Mode:     mode,
 	}
 	if err := saveFileConfig(fc); err != nil {
 		return nil, fmt.Errorf("save config: %w", err)
 	}
 
-	// Validate API key connectivity
-	fmt.Print("  验证 API Key...")
-	if err := validateAPIKey(fc.BaseURL, fc.APIKey); err != nil {
-		fmt.Printf(" ❌ 验证失败: %v\n", err)
-		fmt.Println("  配置已保存，但 API Key 可能无效。你可以稍后修改 ~/.tarot-agent/config.json")
-	} else {
-		fmt.Println(" ✅")
+	// Validate API key connectivity (OpenAI-compatible endpoints only)
+	if providerKey != "anthropic" {
+		fmt.Print("  验证 API Key...")
+		if err := validateAPIEndpoint(baseURL, apiKey); err != nil {
+			fmt.Printf(" ❌ 验证失败: %v\n", err)
+			fmt.Println("  配置已保存，但 API Key 可能无效。你可以稍后修改 ~/.tarot-agent/config.json")
+		} else {
+			fmt.Println(" ✅")
+		}
 	}
 
 	cfgPath, _ := configPath()
@@ -165,6 +211,7 @@ func RunSetup() (*Config, error) {
 	fmt.Println()
 
 	return &Config{
+		Provider: fc.Provider,
 		APIKey:   fc.APIKey,
 		BaseURL:  fc.BaseURL,
 		Model:    fc.Model,
@@ -173,8 +220,9 @@ func RunSetup() (*Config, error) {
 	}, nil
 }
 
-// validateAPIKey checks if the API key is valid by hitting the /v1/models endpoint.
-func validateAPIKey(baseURL, apiKey string) error {
+// validateAPIEndpoint checks connectivity by hitting the /v1/models endpoint.
+// Only works for OpenAI-compatible APIs (OpenAI, DeepSeek, etc.).
+func validateAPIEndpoint(baseURL, apiKey string) error {
 	client := &http.Client{Timeout: 10 * time.Second}
 
 	req, err := http.NewRequest("GET", strings.TrimRight(baseURL, "/")+"/models", nil)
