@@ -35,3 +35,4 @@ internal/host/tui/testdata/
 ~/.tarot-agent/
 store.out
 coverage.out
+debug.log
