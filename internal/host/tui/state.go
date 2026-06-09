@@ -46,7 +46,7 @@ func (s *InputState) Update(m *Model, msg tea.Msg) (State, tea.Cmd) {
 				m.drawResult = nil
 				m.reading.Reset()
 				if len(readings) > 0 {
-					m.readingVP.SetContent(renderMarkdown(readings[0].Interpretation))
+					m.readingVP.SetContent(renderMarkdown(readings[0].Interpretation, m.readingVP.Width))
 				}
 				return &HistoryState{}, nil
 			}
@@ -210,7 +210,7 @@ func (s *ReadingState) Update(m *Model, msg tea.Msg) (State, tea.Cmd) {
 	switch msg := msg.(type) {
 	case agentDeltaMsg:
 		m.reading.WriteString(msg.text)
-		m.readingVP.SetContent(renderMarkdown(m.reading.String()))
+		m.readingVP.SetContent(renderMarkdown(m.reading.String(), m.readingVP.Width))
 		m.readingVP.GotoBottom()
 		return s, m.bridge.nextEvent()
 
@@ -335,7 +335,7 @@ func (s *HistoryState) Update(m *Model, msg tea.Msg) (State, tea.Cmd) {
 func (s *HistoryState) updateViewport(m *Model) {
 	if m.historyCursor >= 0 && m.historyCursor < len(m.historyReadings) {
 		r := m.historyReadings[m.historyCursor]
-		m.readingVP.SetContent(renderMarkdown(r.Interpretation))
+		m.readingVP.SetContent(renderMarkdown(r.Interpretation, m.readingVP.Width))
 	}
 }
 

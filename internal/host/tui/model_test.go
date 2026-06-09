@@ -407,3 +407,43 @@ func TestView_SmallTerminal_NoPanic(t *testing.T) {
 		_ = m.View()
 	}
 }
+
+// Test: renderMarkdown wraps long CJK lines within viewport width
+func TestRenderMarkdown_LongCJKLine_Wraps(t *testing.T) {
+	// Simulate a long AI-generated paragraph (no newlines)
+	longText := "星币八属于土元素，土象征落地、身体力行、物质的积累。当土元素出现在指引位置，通常意味着今天的重心应该在具体行动上，而非空想。给你的思考：今天你的土是肥沃的土壤还是僵硬的硬土？你是在踏实地播种，还是只是在原地踩踏？"
+
+	viewportW := 40
+	rendered := renderMarkdown(longText, viewportW)
+	lines := strings.Split(rendered, "\n")
+
+	for i, line := range lines {
+		visibleW := lipglossWidth(line)
+		// Allow some tolerance for ANSI edge cases, but line should be
+		// roughly within viewport width (CJK chars = 2 columns each)
+		if visibleW > viewportW+4 {
+			t.Errorf("line %d visible width %d exceeds viewport %d: %q",
+				i, visibleW, viewportW, truncateString(line, 60))
+		}
+	}
+}
+
+// Test: renderMarkdown with maxWidth=0 doesn't wrap
+func TestRenderMarkdown_NoWrap_WhenMaxWidthZero(t *testing.T) {
+	longText := "这是一段很长的文本不会被折行因为maxWidth为零"
+	rendered := renderMarkdown(longText, 0)
+	lines := strings.Split(rendered, "\n")
+	if len(lines) != 1 {
+		t.Errorf("expected 1 line with maxWidth=0, got %d", len(lines))
+	}
+}
+
+// Test: renderMarkdown preserves short lines
+func TestRenderMarkdown_ShortLines_Unchanged(t *testing.T) {
+	text := "短行\n\n另一行"
+	rendered := renderMarkdown(text, 80)
+	lines := strings.Split(rendered, "\n")
+	if len(lines) != 3 {
+		t.Errorf("expected 3 lines, got %d", len(lines))
+	}
+}
