@@ -224,7 +224,6 @@ func (s *ReadingState) Update(m *Model, msg tea.Msg) (State, tea.Cmd) {
 
 	case agentEndMsg:
 		m.bridge.cleanup()
-		// Finalize: save reading content
 		m.readingContent = m.readingBuf.String()
 		m.readingBuf.Reset()
 		m.readingVP.SetContent(m.renderReadingMarkdown())
@@ -492,17 +491,19 @@ func renderSplitView(m *Model) StateView {
 	// Separator
 	chatSep := separatorStyle.Render(strings.Repeat("─", m.layout.RightWidth-2))
 
-	// Chat section: title + viewport, constrained to chatVP.Height
+	// Chat section: title + content, constrained to chatVP.Height
 	chatTitle := renderPanelTitle("对话", colorAccent)
-	chatContent := m.chatVP.View()
+	var chatBody string
 	if len(m.chatMessages) == 0 && m.chatStreamBuf.Len() == 0 {
-		chatContent = styleMuted.Italic(true).Render("  解读后可以继续追问...")
+		chatBody = "\n" + styleMuted.Italic(true).Render("  解读后可以继续追问...")
+	} else {
+		chatBody = "\n" + m.chatVP.View()
 	}
-	chatHint := styleSubtle.Render("  ↑↓/jk 滚动")
+	chatHint := "\n" + styleSubtle.Render("  ↑↓/jk 滚动")
 	chatPart := lipgloss.NewStyle().
 		Width(m.layout.RightWidth).
 		Height(m.chatVP.Height + 2). // +2 for title + hint
-		Render(chatTitle + "\n" + chatContent + "\n" + chatHint)
+		Render(chatTitle + chatBody + chatHint)
 
 	right := readingPart + "\n" + chatSep + "\n" + chatPart
 	return StateView{Left: left, Right: right}

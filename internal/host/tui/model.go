@@ -214,6 +214,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	newState, cmd := m.state.Update(m, msg)
 	if newState != nil {
 		m.state = newState
+		m.layoutHeights() // recalculate layout for new state
 	}
 	return m, cmd
 }

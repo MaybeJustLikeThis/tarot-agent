@@ -1,0 +1,10 @@
+time=2026-06-09T20:48:38.348+08:00 level=INFO msg="starting tarot-agent" provider=deepseek model=deepseek-chat base_url=https://api.deepseek.com
+time=2026-06-09T20:48:38.371+08:00 level=INFO msg="store initialized" cards=78 spreads=3
+time=2026-06-09T20:48:38.371+08:00 level=INFO msg="model initialized" provider=deepseek model=deepseek-chat
+time=2026-06-09T20:48:38.372+08:00 level=INFO msg="agent built" mode=专业模式
+[?25l[?1049h[2J[H[?25l[?2004h[H
+  ✦ 星语 Tarot Agent
+
+  终端窗口太小，请调整到至少 80×20。
+  当前大小：0×0
+[6;H[2K[?2004l[?25h[?1002l[?1003l[?1006l[?1049l[?25h
