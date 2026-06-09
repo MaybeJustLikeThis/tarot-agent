@@ -155,6 +155,9 @@ type Model struct {
 	toolCalls []string
 	err       error
 
+	// Focus zone for scroll control ("reading" or "chat")
+	focusZone string
+
 	// History state
 	historyReadings []domain.Reading
 	historyCursor   int
@@ -336,6 +339,7 @@ func (m *Model) resetChat() {
 	m.chatMessages = nil
 	m.chatStreamBuf.Reset()
 	m.chatVP.SetContent("")
+	m.focusZone = "reading"
 }
 
 // appendChatUserMessage adds a user message to the chat.
@@ -354,6 +358,23 @@ func (m *Model) finalizeChatStream() {
 // renderReadingMarkdown renders the reading content for the viewport.
 func (m *Model) renderReadingMarkdown() string {
 	return renderMarkdown(m.readingContent, m.readingVP.Width-2)
+}
+
+// focusedVP returns the currently focused viewport for scroll control.
+func (m *Model) focusedVP() *viewport.Model {
+	if m.focusZone == "chat" {
+		return &m.chatVP
+	}
+	return &m.readingVP
+}
+
+// toggleFocus switches focus between "reading" and "chat".
+func (m *Model) toggleFocus() {
+	if m.focusZone == "chat" {
+		m.focusZone = "reading"
+	} else {
+		m.focusZone = "chat"
+	}
 }
 
 // renderChatConversation renders the full chat history for the viewport.

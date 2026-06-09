@@ -269,17 +269,20 @@ func (s *FollowUpState) Update(m *Model, msg tea.Msg) (State, tea.Cmd) {
 		switch key.String() {
 		case "ctrl+c":
 			return s, tea.Quit
+		case "tab":
+			m.toggleFocus()
+			return s, nil
 		case "up", "k":
-			m.chatVP.LineUp(1)
+			m.focusedVP().LineUp(1)
 			return s, nil
 		case "down", "j":
-			m.chatVP.LineDown(1)
+			m.focusedVP().LineDown(1)
 			return s, nil
 		case "pgup":
-			m.chatVP.HalfViewUp()
+			m.focusedVP().HalfViewUp()
 			return s, nil
 		case "pgdown":
-			m.chatVP.HalfViewDown()
+			m.focusedVP().HalfViewDown()
 			return s, nil
 		case "enter":
 			input := strings.TrimSpace(m.input.Value())
@@ -350,14 +353,16 @@ func (s *ChatState) Update(m *Model, msg tea.Msg) (State, tea.Cmd) {
 		switch key.String() {
 		case "ctrl+c":
 			return s, tea.Quit
+		case "tab":
+			m.toggleFocus()
 		case "up", "k":
-			m.chatVP.LineUp(1)
+			m.focusedVP().LineUp(1)
 		case "down", "j":
-			m.chatVP.LineDown(1)
+			m.focusedVP().LineDown(1)
 		case "pgup":
-			m.chatVP.HalfViewUp()
+			m.focusedVP().HalfViewUp()
 		case "pgdown":
-			m.chatVP.HalfViewDown()
+			m.focusedVP().HalfViewDown()
 		}
 	}
 
@@ -481,25 +486,37 @@ func renderSplitView(m *Model) StateView {
 	}
 
 	// Reading section: title + viewport, constrained to readingVP.Height
-	readingTitle := renderPanelTitle("解读", colorPrimary)
+	readingColor := colorPrimary
+	if m.focusZone == "reading" {
+		readingColor = colorSuccess // highlight focused zone
+	}
+	readingTitle := renderPanelTitle("解读", readingColor)
 	readingContent := m.readingVP.View()
 	readingPart := lipgloss.NewStyle().
 		Width(m.layout.RightWidth).
-		Height(m.readingVP.Height + 1). // +1 for title line
+		Height(m.readingVP.Height + 1).
 		Render(readingTitle + "\n" + readingContent)
 
 	// Separator
 	chatSep := separatorStyle.Render(strings.Repeat("─", m.layout.RightWidth-2))
 
 	// Chat section: title + content, constrained to chatVP.Height
-	chatTitle := renderPanelTitle("对话", colorAccent)
+	chatColor := colorAccent
+	if m.focusZone == "chat" {
+		chatColor = colorSuccess
+	}
+	chatTitle := renderPanelTitle("对话", chatColor)
 	var chatBody string
 	if len(m.chatMessages) == 0 && m.chatStreamBuf.Len() == 0 {
 		chatBody = "\n" + styleMuted.Italic(true).Render("  解读后可以继续追问...")
 	} else {
 		chatBody = "\n" + m.chatVP.View()
 	}
-	chatHint := "\n" + styleSubtle.Render("  ↑↓/jk 滚动")
+	focusLabel := "解读"
+	if m.focusZone == "chat" {
+		focusLabel = "对话"
+	}
+	chatHint := "\n" + styleSubtle.Render("  ↑↓/jk 滚动 · tab 切换 · 焦点: "+focusLabel)
 	chatPart := lipgloss.NewStyle().
 		Width(m.layout.RightWidth).
 		Height(m.chatVP.Height + 2). // +2 for title + hint
