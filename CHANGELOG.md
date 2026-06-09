@@ -2,11 +2,25 @@
 
 本文件记录 tarot-agent 的版本变更。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
-## [0.2.0] - 2026-06-09
+## [0.3.0] - 2026-06-09
 
 ### 新增
 
 - **Anthropic API 兼容** — 支持 DeepSeek、OpenAI、Anthropic 三种 AI 服务商，首次设置向导可选择
+- `TAROT_PROVIDER` 环境变量，可切换 AI 服务商
+- API Key 按 provider 格式验证（Anthropic `sk-ant-`、OpenAI/DeepSeek `sk-`）
+- 已有配置无 provider 字段时自动从 BaseURL 推断迁移
+
+### 改进
+
+- 设置向导重构为 5 步流程：选择服务商 → API 地址 → 模型 → API Key → 解读模式
+- 每个 provider 自动填充默认 URL 和 Model，回车即用
+- 日志输出包含 provider 信息
+
+## [0.2.0] - 2026-06-09
+
+### 新增
+
 - **历史记录浏览** — 输入界面按 `tab` 键查看最近 20 条占卜记录，支持 `↑↓` 浏览、`esc` 返回
 - **每日一牌** — 按 `ctrl+d` 一键进入单牌快速模式，自动跳过问题输入和牌阵选择
 - **API Key 验证** — 首次设置保存 Key 后自动验证连通性，失败时提示用户
