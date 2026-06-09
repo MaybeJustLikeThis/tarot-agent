@@ -46,7 +46,7 @@ func (s *InputState) Update(m *Model, msg tea.Msg) (State, tea.Cmd) {
 				m.drawResult = nil
 				m.reading.Reset()
 				if len(readings) > 0 {
-					m.readingVP.SetContent(renderMarkdown(readings[0].Interpretation, m.readingVP.Width))
+					m.readingVP.SetContent(renderMarkdown(readings[0].Interpretation, m.readingVP.Width-2))
 				}
 				return &HistoryState{}, nil
 			}
@@ -66,6 +66,7 @@ func (s *InputState) Update(m *Model, msg tea.Msg) (State, tea.Cmd) {
 			m.userInput = input
 			m.reading.Reset()
 			m.err = nil
+			m.readingVP.SetContent("") // clear viewport for new reading
 			return &SpreadState{}, nil
 		}
 	}
@@ -210,7 +211,7 @@ func (s *ReadingState) Update(m *Model, msg tea.Msg) (State, tea.Cmd) {
 	switch msg := msg.(type) {
 	case agentDeltaMsg:
 		m.reading.WriteString(msg.text)
-		m.readingVP.SetContent(renderMarkdown(m.reading.String(), m.readingVP.Width))
+		m.readingVP.SetContent(renderMarkdown(m.reading.String(), m.readingVP.Width-2))
 		m.readingVP.GotoBottom()
 		return s, m.bridge.nextEvent()
 
@@ -276,6 +277,8 @@ func (s *FollowUpState) Update(m *Model, msg tea.Msg) (State, tea.Cmd) {
 			if input == "" {
 				m.bridge.clearMessages()
 				m.input.Reset()
+				m.reading.Reset()
+				m.readingVP.SetContent("") // clear old reading from viewport
 				return &InputState{}, nil
 			}
 			if isExitCmd(input) {
@@ -335,7 +338,7 @@ func (s *HistoryState) Update(m *Model, msg tea.Msg) (State, tea.Cmd) {
 func (s *HistoryState) updateViewport(m *Model) {
 	if m.historyCursor >= 0 && m.historyCursor < len(m.historyReadings) {
 		r := m.historyReadings[m.historyCursor]
-		m.readingVP.SetContent(renderMarkdown(r.Interpretation, m.readingVP.Width))
+		m.readingVP.SetContent(renderMarkdown(r.Interpretation, m.readingVP.Width-2))
 	}
 }
 

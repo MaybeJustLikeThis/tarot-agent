@@ -152,9 +152,9 @@ func TestLayout_ViewportSynced(t *testing.T) {
 	m := newTestModel()
 
 	// After layoutHeights, viewport should match right panel
-	if m.readingVP.Width != m.layout.RightWidth-4 {
+	if m.readingVP.Width != m.layout.RightWidth-6 {
 		t.Errorf("viewport width: got %d, want %d",
-			m.readingVP.Width, m.layout.RightWidth-4)
+			m.readingVP.Width, m.layout.RightWidth-6)
 	}
 	if m.readingVP.Height != m.layout.BodyHeight-3 {
 		t.Errorf("viewport height: got %d, want %d",
@@ -177,7 +177,7 @@ func TestLayout_Resize_UpdatesAll(t *testing.T) {
 	if m.layout.Height != 24 {
 		t.Errorf("height not updated: %d", m.layout.Height)
 	}
-	if m.readingVP.Width != m.layout.RightWidth-4 {
+	if m.readingVP.Width != m.layout.RightWidth-6 {
 		t.Errorf("viewport not synced after resize")
 	}
 }
@@ -424,6 +424,25 @@ func TestRenderMarkdown_LongCJKLine_Wraps(t *testing.T) {
 		if visibleW > viewportW+4 {
 			t.Errorf("line %d visible width %d exceeds viewport %d: %q",
 				i, visibleW, viewportW, truncateString(line, 60))
+		}
+	}
+}
+
+// Test: renderMarkdown output lines don't exceed viewport width (using lipgloss width)
+func TestRenderMarkdown_StyledOutput_FitsViewport(t *testing.T) {
+	// Use the kind of text the AI actually generates
+	longText := "1️⃣ 被看见——你的累被确认了，不是矫情，是真的累。被允许暂停——不需要立刻变好，不需要马上找到出路。"
+
+	viewportW := 40
+	rendered := renderMarkdown(longText, viewportW)
+	lines := strings.Split(rendered, "\n")
+
+	for i, line := range lines {
+		// Use lipgloss.Width which is what the viewport uses internally
+		styledW := lipgloss.Width(line)
+		if styledW > viewportW {
+			t.Errorf("line %d lipgloss width %d exceeds viewport %d: %q",
+				i, styledW, viewportW, truncateString(line, 80))
 		}
 	}
 }

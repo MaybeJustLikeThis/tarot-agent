@@ -79,7 +79,7 @@ func (m *Model) layoutHeights() {
 	}
 
 	// Sync viewport to right panel dimensions
-	m.readingVP.Width = rightW - 4  // -4 for padding
+	m.readingVP.Width = rightW - 6  // -6 for padding + safety margin for CJK width
 	m.readingVP.Height = bodyH - 3  // -3 for panel title + scroll hint
 	if m.readingVP.Width < 10 {
 		m.readingVP.Width = 10
@@ -186,11 +186,19 @@ func (m *Model) View() string {
 	}
 
 	// Re-sync viewport size every frame (ainovel-cli pattern: View() has inline guard)
-	if m.readingVP.Width != m.layout.RightWidth-4 {
-		m.readingVP.Width = m.layout.RightWidth - 4
+	vpW := m.layout.RightWidth - 6
+	if vpW < 10 {
+		vpW = 10
 	}
-	if m.readingVP.Height != m.layout.BodyHeight-3 {
-		m.readingVP.Height = m.layout.BodyHeight - 3
+	vpH := m.layout.BodyHeight - 3
+	if vpH < 3 {
+		vpH = 3
+	}
+	if m.readingVP.Width != vpW {
+		m.readingVP.Width = vpW
+	}
+	if m.readingVP.Height != vpH {
+		m.readingVP.Height = vpH
 	}
 
 	var b strings.Builder
