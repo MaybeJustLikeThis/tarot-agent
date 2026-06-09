@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 
 	"github.com/voocel/agentcore/llm"
 )
@@ -99,8 +100,18 @@ func LoadConfig() (*Config, error) {
 	return cfg, nil
 }
 
+// LogFilePath returns the path to the log file (~/.tarot-agent/tarot.log).
+func LogFilePath() string {
+	dir, err := configDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(dir, "tarot.log")
+}
+
 // InitLogger sets up structured logging based on config.
-func InitLogger(level string) {
+// When logFile is non-empty, logs go to the file; otherwise to stderr.
+func InitLogger(level string, logFile string) {
 	var l slog.Level
 	switch level {
 	case "debug":
@@ -112,7 +123,20 @@ func InitLogger(level string) {
 	default:
 		l = slog.LevelInfo
 	}
-	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: l})))
+
+	var handler slog.Handler
+	if logFile != "" {
+		f, err := os.OpenFile(logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+		if err != nil {
+			// Fallback to stderr if file can't be opened
+			handler = slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: l})
+		} else {
+			handler = slog.NewTextHandler(f, &slog.HandlerOptions{Level: l})
+		}
+	} else {
+		handler = slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: l})
+	}
+	slog.SetDefault(slog.New(handler))
 }
 
 // NewModel creates an LLM model from the configuration.

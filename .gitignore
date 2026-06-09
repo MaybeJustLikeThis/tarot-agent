@@ -36,3 +36,4 @@ internal/host/tui/testdata/
 store.out
 coverage.out
 debug.log
+tarot.log

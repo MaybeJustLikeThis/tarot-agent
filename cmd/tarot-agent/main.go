@@ -54,8 +54,9 @@ func run() error {
 		}
 	}
 
-	// Initialize logger
-	bootstrap.InitLogger(cfg.LogLevel)
+	// Initialize logger — write to file so it doesn't interfere with TUI
+	logPath := bootstrap.LogFilePath()
+	bootstrap.InitLogger(cfg.LogLevel, logPath)
 	slog.Info("starting tarot-agent",
 		"provider", cfg.Provider,
 		"model", cfg.Model,
