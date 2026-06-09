@@ -119,8 +119,8 @@ func TestDump_ActualOutput(t *testing.T) {
 	dumpView(t, "RevealState complete (120x40)", m)
 
 	// 5. ReadingState
-	m.streamBuf.WriteString("根据牌面显示，你最近在工作上遇到了一个重要的选择。女皇牌出现在过去的位置，说明你之前的状态是丰盛和稳定的。\n\n塔牌逆位出现在现在的位置，暗示你可能正在经历一些内在的转变，旧的结构正在被打破。\n\n星星牌正位在未来位置，这是一个非常积极的信号，说明你最终会找到新的方向和希望。")
-	m.readingVP.SetContent(m.streamBuf.String())
+	m.readingBuf.WriteString("根据牌面显示，你最近在工作上遇到了一个重要的选择。女皇牌出现在过去的位置，说明你之前的状态是丰盛和稳定的。\n\n塔牌逆位出现在现在的位置，暗示你可能正在经历一些内在的转变，旧的结构正在被打破。\n\n星星牌正位在未来位置，这是一个非常积极的信号，说明你最终会找到新的方向和希望。")
+	m.readingVP.SetContent(m.readingBuf.String())
 	m.readingVP.GotoBottom()
 	m.state = &ReadingState{}
 	dumpView(t, "ReadingState (120x40)", m)
@@ -136,8 +136,8 @@ func TestDump_ActualOutput(t *testing.T) {
 	result3, _ := tools.DrawCards(m3.store, "three_card")
 	m3.drawResult = result3
 	m3.revealIndex = len(result3.Cards)
-	m3.streamBuf.WriteString("测试解读内容")
-	m3.readingVP.SetContent(m3.streamBuf.String())
+	m3.readingBuf.WriteString("测试解读内容")
+	m3.readingVP.SetContent(m3.readingBuf.String())
 	m3.state = &ReadingState{}
 	dumpView(t, "ReadingState (80x24)", m3)
 

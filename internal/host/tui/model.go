@@ -78,15 +78,38 @@ func (m *Model) layoutHeights() {
 		RightWidth: rightW,
 	}
 
-	// Sync viewport to right panel dimensions
-	m.readingVP.Width = rightW - 6  // -6 for padding + safety margin for CJK width
-	m.readingVP.Height = bodyH - 3  // -3 for panel title + scroll hint
+	// Sync viewports to right panel dimensions
+	readingH := bodyH - 3 // -3 for panel title + scroll hint
+	chatH := 0
+
+	// In FollowUpState, split the right panel: 60% reading, 40% chat
+	if _, isFollowUp := m.state.(*FollowUpState); isFollowUp {
+		readingH = bodyH * 60 / 100
+		if readingH < 4 {
+			readingH = 4
+		}
+		chatH = bodyH - readingH - 1 // -1 for separator between reading and chat
+		if chatH < 4 {
+			chatH = 4
+		}
+	}
+
+	vpW := rightW - 6
+	if vpW < 10 {
+		vpW = 10
+	}
+
+	m.readingVP.Width = vpW
+	m.readingVP.Height = readingH
 	if m.readingVP.Width < 10 {
 		m.readingVP.Width = 10
 	}
 	if m.readingVP.Height < 3 {
 		m.readingVP.Height = 3
 	}
+
+	m.chatVP.Width = vpW
+	m.chatVP.Height = chatH
 }
 
 // ChatMessage represents a single message in the conversation.
@@ -102,7 +125,8 @@ type Model struct {
 	store  *store.Store
 
 	input     textarea.Model
-	readingVP viewport.Model
+	readingVP viewport.Model // top-right: tarot interpretation
+	chatVP    viewport.Model // bottom-right: conversation (follow-up Q&A)
 	spinner   spinner.Model
 	layout    Layout
 	width     int
@@ -114,10 +138,17 @@ type Model struct {
 	spreadType  string
 	drawResult  *domain.DrawResult
 	revealIndex int
-	messages    []ChatMessage // conversation history (user + assistant)
-	streamBuf   strings.Builder // buffer for current streaming assistant message
-	toolCalls   []string
-	err         error
+
+	// Reading (decoupled from conversation)
+	readingContent string    // the AI's interpretation text
+	readingBuf     strings.Builder // streaming buffer during ReadingState
+
+	// Chat conversation (decoupled from reading)
+	chatMessages  []ChatMessage   // user + assistant messages for follow-ups
+	chatStreamBuf strings.Builder // streaming buffer for current AI chat response
+
+	toolCalls []string
+	err       error
 
 	// History state
 	historyReadings []domain.Reading
@@ -135,6 +166,7 @@ func NewModel(agent *agentcore.Agent, guard *reminder.ReadingGuard, s *store.Sto
 	ta.ShowLineNumbers = false
 
 	vp := viewport.New(40, 10)
+	chatVP := viewport.New(40, 5)
 
 	sp := spinner.New()
 	sp.Spinner = spinner.MiniDot
@@ -147,6 +179,7 @@ func NewModel(agent *agentcore.Agent, guard *reminder.ReadingGuard, s *store.Sto
 		mode:      mode,
 		input:     ta,
 		readingVP: vp,
+		chatVP:    chatVP,
 		spinner:   sp,
 	}
 }
@@ -192,20 +225,34 @@ func (m *Model) View() string {
 		return "Loading..."
 	}
 
-	// Re-sync viewport size every frame (ainovel-cli pattern: View() has inline guard)
+	// Re-sync viewports every frame
+	readingH := m.layout.BodyHeight - 3
+	chatH := 0
+	if _, isFollowUp := m.state.(*FollowUpState); isFollowUp {
+		readingH = m.layout.BodyHeight * 60 / 100
+		if readingH < 4 {
+			readingH = 4
+		}
+		chatH = m.layout.BodyHeight - readingH - 1
+		if chatH < 4 {
+			chatH = 4
+		}
+	}
 	vpW := m.layout.RightWidth - 6
 	if vpW < 10 {
 		vpW = 10
 	}
-	vpH := m.layout.BodyHeight - 3
-	if vpH < 3 {
-		vpH = 3
-	}
 	if m.readingVP.Width != vpW {
 		m.readingVP.Width = vpW
 	}
-	if m.readingVP.Height != vpH {
-		m.readingVP.Height = vpH
+	if m.readingVP.Height != readingH {
+		m.readingVP.Height = readingH
+	}
+	if m.chatVP.Width != vpW {
+		m.chatVP.Width = vpW
+	}
+	if m.chatVP.Height != chatH {
+		m.chatVP.Height = chatH
 	}
 
 	var b strings.Builder
@@ -230,7 +277,7 @@ func (m *Model) View() string {
 	switch m.state.(type) {
 	case *SpreadState:
 		inputLabel = "选择牌阵 (1/2/3)："
-	case *FollowUpState:
+	case *FollowUpState, *ChatState:
 		inputLabel = "还有什么想问的？（回车开始新占卜）"
 	case *HistoryState:
 		inputLabel = "浏览历史记录（↑↓ 选择 · esc 返回）"
@@ -283,38 +330,59 @@ func joinHorizontal(left, right string) string {
 
 func (m *Model) spinnerOn() bool {
 	switch m.state.(type) {
-	case *RevealState, *ReadingState:
+	case *RevealState, *ReadingState, *ChatState:
 		return true
 	}
 	return false
 }
 
-// resetConversation clears all messages and stream buffer.
-func (m *Model) resetConversation() {
-	m.messages = nil
-	m.streamBuf.Reset()
+// resetReading clears the reading content.
+func (m *Model) resetReading() {
+	m.readingContent = ""
+	m.readingBuf.Reset()
+	m.readingVP.SetContent("")
 }
 
-// appendUserMessage adds a user message to the conversation.
-func (m *Model) appendUserMessage(text string) {
-	m.messages = append(m.messages, ChatMessage{Role: "user", Content: text})
+// resetChat clears the chat conversation.
+func (m *Model) resetChat() {
+	m.chatMessages = nil
+	m.chatStreamBuf.Reset()
+	m.chatVP.SetContent("")
 }
 
-// renderConversation renders the full conversation history as markdown text.
-// If streaming is true, includes the current stream buffer as the latest assistant message.
-func (m *Model) renderConversation(streaming bool) string {
+// appendChatUserMessage adds a user message to the chat.
+func (m *Model) appendChatUserMessage(text string) {
+	m.chatMessages = append(m.chatMessages, ChatMessage{Role: "user", Content: text})
+}
+
+// finalizeChatStream moves the streaming buffer into chat messages.
+func (m *Model) finalizeChatStream() {
+	if m.chatStreamBuf.Len() > 0 {
+		m.chatMessages = append(m.chatMessages, ChatMessage{Role: "assistant", Content: m.chatStreamBuf.String()})
+		m.chatStreamBuf.Reset()
+	}
+}
+
+// renderReadingMarkdown renders the reading content for the viewport.
+func (m *Model) renderReadingMarkdown() string {
+	return renderMarkdown(m.readingContent, m.readingVP.Width-2)
+}
+
+// renderChatConversation renders the full chat history for the viewport.
+// If streaming is true, includes the current stream buffer as the latest message.
+func (m *Model) renderChatConversation(streaming bool) string {
 	var b strings.Builder
-	for _, msg := range m.messages {
+	for _, msg := range m.chatMessages {
 		if msg.Role == "user" {
 			b.WriteString("> **你**：" + msg.Content + "\n\n")
 		} else {
 			b.WriteString(msg.Content + "\n\n")
 		}
 	}
-	if streaming && m.streamBuf.Len() > 0 {
-		b.WriteString(m.streamBuf.String())
+	if streaming && m.chatStreamBuf.Len() > 0 {
+		b.WriteString(m.chatStreamBuf.String())
 	}
-	return renderMarkdown(b.String(), m.readingVP.Width-2)
+	return renderMarkdown(b.String(), m.chatVP.Width-2)
 }
 
 // lipglossHeight measures the rendered height of a string.

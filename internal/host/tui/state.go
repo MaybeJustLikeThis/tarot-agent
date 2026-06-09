@@ -44,7 +44,8 @@ func (s *InputState) Update(m *Model, msg tea.Msg) (State, tea.Cmd) {
 				m.historyReadings = readings
 				m.historyCursor = 0
 				m.drawResult = nil
-				m.resetConversation()
+				m.resetReading()
+				m.resetChat()
 				if len(readings) > 0 {
 					m.readingVP.SetContent(renderMarkdown(readings[0].Interpretation, m.readingVP.Width-2))
 				}
@@ -52,7 +53,8 @@ func (s *InputState) Update(m *Model, msg tea.Msg) (State, tea.Cmd) {
 			}
 		case "ctrl+d":
 			m.userInput = "今日指引"
-			m.resetConversation()
+			m.resetReading()
+			m.resetChat()
 			m.err = nil
 			return startReveal(m, "single")
 		case "enter":
@@ -64,9 +66,9 @@ func (s *InputState) Update(m *Model, msg tea.Msg) (State, tea.Cmd) {
 				return s, tea.Quit
 			}
 			m.userInput = input
-			m.resetConversation()
+			m.resetReading()
+			m.resetChat()
 			m.err = nil
-			m.readingVP.SetContent("")
 			return &SpreadState{}, nil
 		}
 	}
@@ -130,7 +132,8 @@ func startReveal(m *Model, spreadType string) (State, tea.Cmd) {
 	m.revealIndex = 0
 	m.bridge.guard.Reset()
 	m.bridge.guard.SetExpectedCards(int32(len(result.Cards)))
-	m.resetConversation()
+	m.resetReading()
+	m.resetChat()
 	m.toolCalls = nil
 	m.err = nil
 
@@ -210,8 +213,8 @@ type ReadingState struct{}
 func (s *ReadingState) Update(m *Model, msg tea.Msg) (State, tea.Cmd) {
 	switch msg := msg.(type) {
 	case agentDeltaMsg:
-		m.streamBuf.WriteString(msg.text)
-		m.readingVP.SetContent(m.renderConversation(true))
+		m.readingBuf.WriteString(msg.text)
+		m.readingVP.SetContent(renderMarkdown(m.readingBuf.String(), m.readingVP.Width-2))
 		m.readingVP.GotoBottom()
 		return s, m.bridge.nextEvent()
 
@@ -221,20 +224,17 @@ func (s *ReadingState) Update(m *Model, msg tea.Msg) (State, tea.Cmd) {
 
 	case agentEndMsg:
 		m.bridge.cleanup()
-		// Finalize: move stream buffer into messages
-		if m.streamBuf.Len() > 0 {
-			m.messages = append(m.messages, ChatMessage{Role: "assistant", Content: m.streamBuf.String()})
-			m.streamBuf.Reset()
-		}
+		// Finalize: save reading content
+		m.readingContent = m.readingBuf.String()
+		m.readingBuf.Reset()
+		m.readingVP.SetContent(m.renderReadingMarkdown())
 		return &FollowUpState{}, nil
 
 	case agentErrMsg:
 		m.bridge.cleanup()
-		// Finalize partial response on error too
-		if m.streamBuf.Len() > 0 {
-			m.messages = append(m.messages, ChatMessage{Role: "assistant", Content: m.streamBuf.String()})
-			m.streamBuf.Reset()
-		}
+		m.readingContent = m.readingBuf.String()
+		m.readingBuf.Reset()
+		m.readingVP.SetContent(m.renderReadingMarkdown())
 		m.err = msg.err
 		return &FollowUpState{}, nil
 	}
@@ -271,37 +271,39 @@ func (s *FollowUpState) Update(m *Model, msg tea.Msg) (State, tea.Cmd) {
 		case "ctrl+c":
 			return s, tea.Quit
 		case "up", "k":
-			m.readingVP.LineUp(1)
+			m.chatVP.LineUp(1)
 			return s, nil
 		case "down", "j":
-			m.readingVP.LineDown(1)
+			m.chatVP.LineDown(1)
 			return s, nil
 		case "pgup":
-			m.readingVP.HalfViewUp()
+			m.chatVP.HalfViewUp()
 			return s, nil
 		case "pgdown":
-			m.readingVP.HalfViewDown()
+			m.chatVP.HalfViewDown()
 			return s, nil
 		case "enter":
 			input := strings.TrimSpace(m.input.Value())
 			if input == "" {
 				m.bridge.clearMessages()
 				m.input.Reset()
-				m.resetConversation()
-				m.readingVP.SetContent("")
+				m.resetReading()
+				m.resetChat()
 				return &InputState{}, nil
 			}
 			if isExitCmd(input) {
 				return s, tea.Quit
 			}
-			// Add user message to conversation and start new reading
-			m.appendUserMessage(input)
-			m.streamBuf.Reset()
+			// Add user message to chat and start new AI response
+			m.appendChatUserMessage(input)
+			m.chatStreamBuf.Reset()
+			m.chatVP.SetContent(m.renderChatConversation(false))
+			m.chatVP.GotoBottom()
 			m.input.Reset()
 			m.toolCalls = nil
 			m.err = nil
 			m.bridge.setup(input)
-			return &ReadingState{}, m.bridge.nextEvent()
+			return &ChatState{}, m.bridge.nextEvent()
 		}
 	}
 
@@ -311,7 +313,60 @@ func (s *FollowUpState) Update(m *Model, msg tea.Msg) (State, tea.Cmd) {
 }
 
 func (s *FollowUpState) View(m *Model) StateView {
-	return renderReadingView(m)
+	return renderSplitView(m)
+}
+
+// --- ChatState ---
+// ChatState streams AI responses for follow-up questions into the chat viewport.
+
+type ChatState struct{}
+
+func (s *ChatState) Update(m *Model, msg tea.Msg) (State, tea.Cmd) {
+	switch msg := msg.(type) {
+	case agentDeltaMsg:
+		m.chatStreamBuf.WriteString(msg.text)
+		m.chatVP.SetContent(m.renderChatConversation(true))
+		m.chatVP.GotoBottom()
+		return s, m.bridge.nextEvent()
+
+	case agentToolMsg:
+		m.toolCalls = append(m.toolCalls, msg.name)
+		return s, m.bridge.nextEvent()
+
+	case agentEndMsg:
+		m.bridge.cleanup()
+		m.finalizeChatStream()
+		m.chatVP.SetContent(m.renderChatConversation(false))
+		return &FollowUpState{}, nil
+
+	case agentErrMsg:
+		m.bridge.cleanup()
+		m.finalizeChatStream()
+		m.chatVP.SetContent(m.renderChatConversation(false))
+		m.err = msg.err
+		return &FollowUpState{}, nil
+	}
+
+	if key, ok := msg.(tea.KeyMsg); ok {
+		switch key.String() {
+		case "ctrl+c":
+			return s, tea.Quit
+		case "up", "k":
+			m.chatVP.LineUp(1)
+		case "down", "j":
+			m.chatVP.LineDown(1)
+		case "pgup":
+			m.chatVP.HalfViewUp()
+		case "pgdown":
+			m.chatVP.HalfViewDown()
+		}
+	}
+
+	return s, nil
+}
+
+func (s *ChatState) View(m *Model) StateView {
+	return renderSplitView(m)
 }
 
 // --- HistoryState ---
@@ -401,7 +456,8 @@ func isExitCmd(s string) bool {
 	return false
 }
 
-// renderReadingView renders the shared view for ReadingState, FollowUpState, and HistoryState.
+// renderReadingView renders the reading-only view (ReadingState, RevealState).
+// Reading viewport takes the full right panel height.
 func renderReadingView(m *Model) StateView {
 	left := renderPanelTitle("牌面", colorAccent) + "\n"
 	if m.drawResult != nil {
@@ -412,5 +468,33 @@ func renderReadingView(m *Model) StateView {
 	scrollHint := styleSubtle.Render("  ↑↓/jk 滚动")
 	right := renderPanelTitle("解读", colorPrimary) + "\n" +
 		m.readingVP.View() + "\n" + scrollHint
+	return StateView{Left: left, Right: right}
+}
+
+// renderSplitView renders the split view (FollowUpState, ChatState).
+// Reading viewport on top, chat viewport on bottom.
+func renderSplitView(m *Model) StateView {
+	left := renderPanelTitle("牌面", colorAccent) + "\n"
+	if m.drawResult != nil {
+		left += renderSpreadLayout(m.drawResult.Cards, len(m.drawResult.Cards), m.spreadType, m.layout.LeftWidth-4)
+	} else {
+		left += renderCentered(m.layout.BodyHeight-1, styleMuted.Render("等待抽牌..."))
+	}
+
+	// Right panel: reading (top) + separator + chat (bottom)
+	readingPart := renderPanelTitle("解读", colorPrimary) + "\n" +
+		m.readingVP.View()
+
+	chatContent := m.chatVP.View()
+	if chatContent == "" || len(m.chatMessages) == 0 {
+		chatContent = styleMuted.Italic(true).Render("  解读后可以继续追问...")
+	}
+	chatHint := styleSubtle.Render("  ↑↓/jk 滚动")
+	chatPart := renderPanelTitle("对话", colorAccent) + "\n" +
+		chatContent + "\n" + chatHint
+
+	chatSep := separatorStyle.Render(strings.Repeat("─", m.layout.RightWidth-2))
+	right := readingPart + "\n" + chatSep + "\n" + chatPart
+
 	return StateView{Left: left, Right: right}
 }

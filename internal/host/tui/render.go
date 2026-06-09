@@ -137,6 +137,8 @@ func stateDisplayName(s State) string {
 		return "解读中"
 	case *FollowUpState:
 		return "追问"
+	case *ChatState:
+		return "对话中"
 	case *HistoryState:
 		return "历史记录"
 	default:
