@@ -2,6 +2,30 @@
 
 本文件记录 tarot-agent 的版本变更。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [0.4.0] - 2026-06-09
+
+### 新增
+
+- **解读区与对话区解耦** — 右面板上下分区：上半部分显示塔罗解读（只读），下半部分显示追问对话（独立滚动）
+- **Tab 焦点切换** — 按 Tab 在解读区 ↔ 对话区之间切换滚动焦点，焦点区标题高亮显示
+- **聊天记录式对话** — 追问时用户问题和 AI 回复交替显示在对话区，完整对话历史可见
+- **多行输入** — textarea 支持最多 6 行输入
+
+### 修复
+
+- **解读区文字溢出** — renderMarkdown 按 CJK 字符宽度先折行再渲染，viewport 不再溢出
+- **状态切换 viewport 残留** — 回到 InputState 时清空 viewport 和 reading buffer
+- **UI 跳动** — 输入区高度改为固定常量，不再随 textarea 内容动态变化
+- **对话区高度为 0** — 状态切换时重新计算布局，chatVP 高度不再丢失
+- **对话区内容被截断** — 解读和对话各自独立约束高度，不再被 MaxHeight 一刀切
+
+### 重构
+
+- `strings.Builder` → 结构化 `ChatMessage` 对话历史
+- 单 viewport → 双 viewport（readingVP + chatVP）
+- 新增 `ChatState` 状态，追问时独立管理对话流式输出
+- `layoutHeights()` 改为固定输入高度，状态切换时自动重算
+
 ## [0.3.0] - 2026-06-09
 
 ### 新增
