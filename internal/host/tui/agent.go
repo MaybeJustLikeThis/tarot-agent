@@ -1,10 +1,16 @@
 package tui
 
 import (
+	"context"
+	"fmt"
+	"time"
+
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/voocel/agentcore"
 	"github.com/voocel/tarot-agent/internal/host/reminder"
 )
+
+const agentTimeout = 120 * time.Second
 
 // Agent event messages sent to the TUI event loop.
 type (
@@ -53,11 +59,26 @@ func (b *agentBridge) setup(prompt string) {
 	})
 
 	go func() {
-		if err := b.agent.Prompt(prompt); err != nil {
-			b.eventCh <- agentErrMsg{err: err}
-			return
+		ctx, cancel := context.WithTimeout(context.Background(), agentTimeout)
+		defer cancel()
+
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			if err := b.agent.Prompt(prompt); err != nil {
+				b.eventCh <- agentErrMsg{err: err}
+				return
+			}
+			b.agent.WaitForIdle()
+		}()
+
+		select {
+		case <-done:
+			// Agent completed normally
+		case <-ctx.Done():
+			b.agent.Abort()
+			b.eventCh <- agentErrMsg{err: fmt.Errorf("解读超时（%ds），请重试", int(agentTimeout.Seconds()))}
 		}
-		b.agent.WaitForIdle()
 	}()
 }
 

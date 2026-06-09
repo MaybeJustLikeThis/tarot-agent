@@ -4,9 +4,12 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // configDir returns the tarot-agent config directory (~/.tarot-agent).
@@ -147,6 +150,15 @@ func RunSetup() (*Config, error) {
 		return nil, fmt.Errorf("save config: %w", err)
 	}
 
+	// Validate API key connectivity
+	fmt.Print("  验证 API Key...")
+	if err := validateAPIKey(fc.BaseURL, fc.APIKey); err != nil {
+		fmt.Printf(" ❌ 验证失败: %v\n", err)
+		fmt.Println("  配置已保存，但 API Key 可能无效。你可以稍后修改 ~/.tarot-agent/config.json")
+	} else {
+		fmt.Println(" ✅")
+	}
+
 	cfgPath, _ := configPath()
 	fmt.Printf("\n  ✅ 配置已保存到 %s\n", cfgPath)
 	fmt.Println("  下次启动无需重复输入。")
@@ -159,4 +171,31 @@ func RunSetup() (*Config, error) {
 		Mode:     fc.Mode,
 		LogLevel: defaultLogLevel,
 	}, nil
+}
+
+// validateAPIKey checks if the API key is valid by hitting the /v1/models endpoint.
+func validateAPIKey(baseURL, apiKey string) error {
+	client := &http.Client{Timeout: 10 * time.Second}
+
+	req, err := http.NewRequest("GET", strings.TrimRight(baseURL, "/")+"/models", nil)
+	if err != nil {
+		return fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("connect to %s: %w", baseURL, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		return fmt.Errorf("API Key 无效 (HTTP %d)", resp.StatusCode)
+	}
+	if resp.StatusCode >= 500 {
+		return fmt.Errorf("服务端错误 (HTTP %d)，稍后重试", resp.StatusCode)
+	}
+	// 200/404/etc are acceptable — the key itself is valid.
+	_, _ = io.Copy(io.Discard, resp.Body)
+	return nil
 }

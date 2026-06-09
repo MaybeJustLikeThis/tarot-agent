@@ -97,7 +97,7 @@ func renderSeparator(w int) string {
 // renderInputZone renders the bottom input area with label.
 func renderInputZone(m *Model, label string) string {
 	labelStyled := inputLabelStyle.Render("  " + label)
-	return labelStyled + "\n" + m.input.View() + "\n" + statusBarStyle.Render("  回车提交 · q 退出")
+	return labelStyled + "\n" + m.input.View() + "\n" + statusBarStyle.Render("  回车提交 · tab 历史 · ctrl+d 每日一牌 · q 退出")
 }
 
 // renderSpreadOptions renders spread selection UI.
@@ -137,6 +137,8 @@ func stateDisplayName(s State) string {
 		return "解读中"
 	case *FollowUpState:
 		return "追问"
+	case *HistoryState:
+		return "历史记录"
 	default:
 		return ""
 	}

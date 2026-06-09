@@ -30,10 +30,32 @@ type InputState struct{}
 
 func (s *InputState) Update(m *Model, msg tea.Msg) (State, tea.Cmd) {
 	if key, ok := msg.(tea.KeyMsg); ok {
-		if key.String() == "ctrl+c" {
+		switch key.String() {
+		case "ctrl+c":
 			return s, tea.Quit
-		}
-		if key.String() == "enter" {
+		case "tab":
+			// History: only when input is empty to avoid conflicting with typing
+			if strings.TrimSpace(m.input.Value()) == "" {
+				readings, err := m.store.Readings.List(20)
+				if err != nil {
+					m.err = err
+					return s, nil
+				}
+				m.historyReadings = readings
+				m.historyCursor = 0
+				m.drawResult = nil
+				m.reading.Reset()
+				if len(readings) > 0 {
+					m.readingVP.SetContent(renderMarkdown(readings[0].Interpretation))
+				}
+				return &HistoryState{}, nil
+			}
+		case "ctrl+d":
+			m.userInput = "今日指引"
+			m.reading.Reset()
+			m.err = nil
+			return startReveal(m, "single")
+		case "enter":
 			input := strings.TrimSpace(m.input.Value())
 			if input == "" {
 				return s, nil
@@ -56,7 +78,7 @@ func (s *InputState) Update(m *Model, msg tea.Msg) (State, tea.Cmd) {
 func (s *InputState) View(m *Model) StateView {
 	left := renderPanelTitle("牌面", colorAccent) + "\n" +
 		renderCentered(m.layout.BodyHeight-1,
-			lipgloss_muted().Italic(true).Render("等待抽牌..."))
+			styleMuted.Italic(true).Render("等待抽牌..."))
 	right := renderPanelTitle("解读", colorPrimary) + "\n" +
 		renderCentered(m.layout.BodyHeight-1, "")
 	return StateView{Left: left, Right: right}
@@ -71,6 +93,8 @@ func (s *SpreadState) Update(m *Model, msg tea.Msg) (State, tea.Cmd) {
 		switch key.String() {
 		case "ctrl+c":
 			return s, tea.Quit
+		case "esc", "backspace":
+			return &InputState{}, nil
 		case "1":
 			return startReveal(m, "single")
 		case "2":
@@ -87,7 +111,7 @@ func (s *SpreadState) Update(m *Model, msg tea.Msg) (State, tea.Cmd) {
 func (s *SpreadState) View(m *Model) StateView {
 	left := renderPanelTitle("牌面", colorAccent) + "\n" +
 		renderCentered(m.layout.BodyHeight-1,
-			lipgloss_muted().Italic(true).Render("等待抽牌..."))
+			styleMuted.Italic(true).Render("等待抽牌..."))
 	right := renderPanelTitle("解读", colorPrimary) + "\n" +
 		renderCentered(m.layout.BodyHeight-1, "")
 	return StateView{Left: left, Right: right}
@@ -144,14 +168,14 @@ func (s *RevealState) View(m *Model) StateView {
 	// Left: card reveal animation
 	var content string
 	if m.drawResult == nil {
-		content = lipgloss_muted().Render("  等待抽牌...")
+		content = styleMuted.Render("  等待抽牌...")
 	} else if m.revealIndex < len(m.drawResult.Cards) {
 		sp := spinnerStyle.Render(m.spinner.View())
 		status := fmt.Sprintf(" 正在翻牌... (%d/%d)", m.revealIndex, len(m.drawResult.Cards))
 		content = sp + status + "\n\n"
 		content += renderSpreadLayout(m.drawResult.Cards, m.revealIndex, m.spreadType, m.layout.LeftWidth-4)
 	} else {
-		content = lipgloss_success().Render("  ✦ 牌已全部翻开") + "\n\n"
+		content = styleSuccess.Render("  ✦ 牌已全部翻开") + "\n\n"
 		content += renderSpreadLayout(m.drawResult.Cards, len(m.drawResult.Cards), m.spreadType, m.layout.LeftWidth-4)
 	}
 
@@ -160,7 +184,7 @@ func (s *RevealState) View(m *Model) StateView {
 	// Right: waiting
 	right := renderPanelTitle("解读", colorPrimary) + "\n" +
 		renderCentered(m.layout.BodyHeight-1,
-			lipgloss_muted().Italic(true).Render("等待翻牌完成..."))
+			styleMuted.Italic(true).Render("等待翻牌完成..."))
 
 	return StateView{Left: left, Right: right}
 }
@@ -223,21 +247,7 @@ func (s *ReadingState) Update(m *Model, msg tea.Msg) (State, tea.Cmd) {
 }
 
 func (s *ReadingState) View(m *Model) StateView {
-	// Left: cards
-	left := renderPanelTitle("牌面", colorAccent) + "\n"
-	if m.drawResult != nil {
-		cards := renderSpreadLayout(m.drawResult.Cards, len(m.drawResult.Cards), m.spreadType, m.layout.LeftWidth-4)
-		left += cards
-	} else {
-		left += renderCentered(m.layout.BodyHeight-1, lipgloss_muted().Render("等待抽牌..."))
-	}
-
-	// Right: reading viewport
-	scrollHint := lipgloss_subtle().Render("  ↑↓/jk 滚动")
-	right := renderPanelTitle("解读", colorPrimary) + "\n" +
-		m.readingVP.View() + "\n" + scrollHint
-
-	return StateView{Left: left, Right: right}
+	return renderReadingView(m)
 }
 
 // --- FollowUpState ---
@@ -285,17 +295,81 @@ func (s *FollowUpState) Update(m *Model, msg tea.Msg) (State, tea.Cmd) {
 }
 
 func (s *FollowUpState) View(m *Model) StateView {
-	// Left: cards
-	left := renderPanelTitle("牌面", colorAccent) + "\n"
-	if m.drawResult != nil {
-		cards := renderSpreadLayout(m.drawResult.Cards, len(m.drawResult.Cards), m.spreadType, m.layout.LeftWidth-4)
-		left += cards
+	return renderReadingView(m)
+}
+
+// --- HistoryState ---
+
+type HistoryState struct{}
+
+func (s *HistoryState) Update(m *Model, msg tea.Msg) (State, tea.Cmd) {
+	if key, ok := msg.(tea.KeyMsg); ok {
+		switch key.String() {
+		case "ctrl+c":
+			return s, tea.Quit
+		case "esc", "backspace":
+			return &InputState{}, nil
+		case "up", "k":
+			if m.historyCursor > 0 {
+				m.historyCursor--
+				s.updateViewport(m)
+			}
+			return s, nil
+		case "down", "j":
+			if m.historyCursor < len(m.historyReadings)-1 {
+				m.historyCursor++
+				s.updateViewport(m)
+			}
+			return s, nil
+		case "pgup":
+			m.readingVP.HalfViewUp()
+			return s, nil
+		case "pgdown":
+			m.readingVP.HalfViewDown()
+			return s, nil
+		}
+	}
+	return s, nil
+}
+
+func (s *HistoryState) updateViewport(m *Model) {
+	if m.historyCursor >= 0 && m.historyCursor < len(m.historyReadings) {
+		r := m.historyReadings[m.historyCursor]
+		m.readingVP.SetContent(renderMarkdown(r.Interpretation))
+	}
+}
+
+func (s *HistoryState) View(m *Model) StateView {
+	// Left: history list
+	left := renderPanelTitle("历史记录", colorAccent) + "\n"
+
+	if len(m.historyReadings) == 0 {
+		left += renderCentered(m.layout.BodyHeight-1,
+			styleMuted.Italic(true).Render("暂无占卜记录"))
 	} else {
-		left += renderCentered(m.layout.BodyHeight-1, lipgloss_muted().Render("等待抽牌..."))
+		listStyle := lipgloss.NewStyle().Padding(0, 1)
+		var items string
+		for i, r := range m.historyReadings {
+			cursor := "  "
+			if i == m.historyCursor {
+				cursor = styleSuccess.Render("▸ ")
+			}
+			date := r.CreatedAt.Format("01/02 15:04")
+			spread := spreadDisplayName(r.SpreadID)
+			question := truncate(r.Question, 20)
+			line := fmt.Sprintf("%s%s %s — %s",
+				cursor,
+				styleSubtle.Render(date),
+				styleMuted.Render(spread),
+				question)
+			items += line + "\n"
+		}
+		left += listStyle.Render(items)
 	}
 
-	scrollHint := lipgloss_subtle().Render("  ↑↓/jk 滚动")
-	right := renderPanelTitle("解读", colorPrimary) + "\n" +
+	// Right: selected reading
+	scrollHint := styleSubtle.Render("  ↑↓/jk 滚动 · esc 返回")
+	right := renderPanelTitle("解读详情", colorPrimary) + "\n" +
 		m.readingVP.View() + "\n" + scrollHint
 
 	return StateView{Left: left, Right: right}
@@ -311,9 +385,16 @@ func isExitCmd(s string) bool {
 	return false
 }
 
-// lipgloss helpers to avoid import cycle with styles.go
-func lipgloss_muted() lipgloss_style   { return lipgloss.NewStyle().Foreground(colorMuted) }
-func lipgloss_subtle() lipgloss_style   { return lipgloss.NewStyle().Foreground(colorSubtle) }
-func lipgloss_success() lipgloss_style  { return lipgloss.NewStyle().Foreground(colorSuccess) }
-
-type lipgloss_style = lipgloss.Style
+// renderReadingView renders the shared view for ReadingState, FollowUpState, and HistoryState.
+func renderReadingView(m *Model) StateView {
+	left := renderPanelTitle("牌面", colorAccent) + "\n"
+	if m.drawResult != nil {
+		left += renderSpreadLayout(m.drawResult.Cards, len(m.drawResult.Cards), m.spreadType, m.layout.LeftWidth-4)
+	} else {
+		left += renderCentered(m.layout.BodyHeight-1, styleMuted.Render("等待抽牌..."))
+	}
+	scrollHint := styleSubtle.Render("  ↑↓/jk 滚动")
+	right := renderPanelTitle("解读", colorPrimary) + "\n" +
+		m.readingVP.View() + "\n" + scrollHint
+	return StateView{Left: left, Right: right}
+}

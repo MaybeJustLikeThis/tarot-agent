@@ -15,6 +15,13 @@ var (
 	colorSubtle    = lipgloss.AdaptiveColor{Light: "#9CA3AF", Dark: "#6B7280"}
 )
 
+// Reusable style instances (replaces per-call lipgloss helper functions).
+var (
+	styleMuted  = lipgloss.NewStyle().Foreground(colorMuted)
+	styleSubtle = lipgloss.NewStyle().Foreground(colorSubtle)
+	styleSuccess = lipgloss.NewStyle().Foreground(colorSuccess)
+)
+
 // Title styles
 var titleStyle = lipgloss.NewStyle().
 	Foreground(colorPrimary).

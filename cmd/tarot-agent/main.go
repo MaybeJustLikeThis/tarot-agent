@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -85,18 +84,12 @@ func run() error {
 	slog.Info("agent built", "mode", mode.Label())
 
 	// Signal handling
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		<-sigCh
 		result.Agent.Abort()
-		cancel()
 	}()
-
-	_ = ctx
 
 	// Launch TUI
 	return tui.Run(result.Agent, result.Guard, s, result.Mode.Label())

@@ -44,6 +44,8 @@ func (m *Model) layoutHeights() {
 	switch m.state.(type) {
 	case *SpreadState:
 		inputBar = "选择牌阵 (1/2/3)：\n" + renderSpreadOptions(m)
+	case *HistoryState:
+		inputBar = "浏览历史记录（↑↓ 选择 · esc 返回）"
 	default:
 		inputBar = renderInputZone(m, "说说你的情况和想问的问题：")
 	}
@@ -109,6 +111,10 @@ type Model struct {
 	reading     strings.Builder
 	toolCalls   []string
 	err         error
+
+	// History state
+	historyReadings []domain.Reading
+	historyCursor   int
 }
 
 func NewModel(agent *agentcore.Agent, guard *reminder.ReadingGuard, s *store.Store, mode string) *Model {
@@ -211,11 +217,15 @@ func (m *Model) View() string {
 		inputLabel = "选择牌阵 (1/2/3)："
 	case *FollowUpState:
 		inputLabel = "还有什么想问的？（回车开始新占卜）"
+	case *HistoryState:
+		inputLabel = "浏览历史记录（↑↓ 选择 · esc 返回）"
 	}
 
 	if _, isSpread := m.state.(*SpreadState); isSpread {
 		b.WriteString(inputLabel + "\n")
 		b.WriteString(renderSpreadOptions(m))
+	} else if _, isHistory := m.state.(*HistoryState); isHistory {
+		b.WriteString(statusBarStyle.Render("  " + inputLabel))
 	} else {
 		b.WriteString(renderInputZone(m, inputLabel))
 	}

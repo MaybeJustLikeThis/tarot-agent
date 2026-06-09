@@ -1,9 +1,7 @@
 package tools
 
 import (
-	"context"
 	"crypto/rand"
-	"encoding/json"
 	"fmt"
 	"math/big"
 
@@ -67,51 +65,4 @@ func randomOrientation() (domain.Orientation, error) {
 		return domain.Upright, nil
 	}
 	return domain.Reversed, nil
-}
-
-// DrawCardsTool creates an agentcore.Tool that draws random cards for a spread.
-type drawCardsTool struct {
-	store *store.Store
-}
-
-func DrawCardsTool(s *store.Store) *drawCardsTool {
-	return &drawCardsTool{store: s}
-}
-
-func (t *drawCardsTool) Name() string { return "draw_cards" }
-func (t *drawCardsTool) Description() string {
-	return "抽取塔罗牌。指定牌阵类型（single, three_card, celtic_cross），随机抽取对应数量的牌并决定正逆位。每次调用都会重新洗牌抽牌。"
-}
-func (t *drawCardsTool) Schema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"spread_type": map[string]any{
-				"type":        "string",
-				"description": "牌阵类型：single（单牌）、three_card（三牌阵）、celtic_cross（凯尔特十字）",
-				"enum":        []string{"single", "three_card", "celtic_cross"},
-			},
-		},
-		"required": []string{"spread_type"},
-	}
-}
-
-func (t *drawCardsTool) Execute(_ context.Context, args json.RawMessage) (json.RawMessage, error) {
-	var params struct {
-		SpreadType string `json:"spread_type"`
-	}
-	if err := json.Unmarshal(args, &params); err != nil {
-		return nil, fmt.Errorf("parse args: %w", err)
-	}
-
-	result, err := DrawCards(t.store, params.SpreadType)
-	if err != nil {
-		return nil, err
-	}
-
-	data, err := json.MarshalIndent(result, "", "  ")
-	if err != nil {
-		return nil, fmt.Errorf("marshal result: %w", err)
-	}
-	return json.RawMessage(data), nil
 }

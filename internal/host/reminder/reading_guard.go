@@ -17,6 +17,7 @@ const maxConsecutiveBlocks = 3
 type ReadingGuard struct {
 	meaningsCount atomic.Int32
 	expectedCards atomic.Int32
+	blockCount    atomic.Int32
 	readingSaved  atomic.Bool
 }
 
@@ -31,8 +32,17 @@ func NewReadingGuard() (*ReadingGuard, agentcore.StopGuard) {
 		if expected > 0 {
 			actual := g.meaningsCount.Load()
 			if actual < expected {
+				g.blockCount.Add(1)
+				if g.blockCount.Load() >= int32(maxConsecutiveBlocks) {
+					slog.Debug("reading_guard: allowing after max consecutive blocks",
+						"blocks", g.blockCount.Load())
+					return agentcore.StopDecision{
+						Allow:         true,
+						InjectMessage: "注意：部分牌的含义可能未被完整查询，解读中如有不完整之处请理解。",
+					}
+				}
 				slog.Debug("reading_guard: blocking — not all meanings looked up",
-					"expected", expected, "actual", actual)
+					"expected", expected, "actual", actual, "blocks", g.blockCount.Load())
 				return agentcore.StopDecision{
 					Allow:         false,
 					InjectMessage: "你还没有查询所有牌的含义。请对每一张抽到的牌调用 get_card_meaning 查询含义，然后再生成解读。",
@@ -42,7 +52,17 @@ func NewReadingGuard() (*ReadingGuard, agentcore.StopGuard) {
 
 		// Check: reading saved?
 		if !g.readingSaved.Load() {
-			slog.Debug("reading_guard: blocking — reading not saved")
+			g.blockCount.Add(1)
+			if g.blockCount.Load() >= int32(maxConsecutiveBlocks) {
+				slog.Debug("reading_guard: allowing after max consecutive blocks",
+					"blocks", g.blockCount.Load())
+				return agentcore.StopDecision{
+					Allow:         true,
+					InjectMessage: "注意：本次占卜记录可能未被保存。",
+				}
+			}
+			slog.Debug("reading_guard: blocking — reading not saved",
+				"blocks", g.blockCount.Load())
 			return agentcore.StopDecision{
 				Allow:         false,
 				InjectMessage: "你还没有保存本次占卜记录。请调用 save_reading 保存记录。",
@@ -78,5 +98,6 @@ func (g *ReadingGuard) SetExpectedCards(n int32) {
 func (g *ReadingGuard) Reset() {
 	g.meaningsCount.Store(0)
 	g.expectedCards.Store(0)
+	g.blockCount.Store(0)
 	g.readingSaved.Store(false)
 }
