@@ -34,9 +34,9 @@ func TestCardStore_MajorArcanaCount(t *testing.T) {
 
 func TestCardStore_MinorArcanaPerSuit(t *testing.T) {
 	suitAccessors := []struct {
-		name    string
-		jsonFn  func() []byte
-		suit    string
+		name   string
+		jsonFn func() []byte
+		suit   string
 	}{
 		{"wands", store.MinorWandsJSON, "wands"},
 		{"cups", store.MinorCupsJSON, "cups"},

@@ -119,36 +119,6 @@ func LogFilePath() string {
 	return filepath.Join(dir, "tarot.log")
 }
 
-// InitLogger sets up structured logging based on config.
-// When logFile is non-empty, logs go to the file; otherwise to stderr.
-func InitLogger(level string, logFile string) {
-	var l slog.Level
-	switch level {
-	case "debug":
-		l = slog.LevelDebug
-	case "warn":
-		l = slog.LevelWarn
-	case "error":
-		l = slog.LevelError
-	default:
-		l = slog.LevelInfo
-	}
-
-	var handler slog.Handler
-	if logFile != "" {
-		f, err := os.OpenFile(logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
-		if err != nil {
-			// Fallback to stderr if file can't be opened
-			handler = slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: l})
-		} else {
-			handler = slog.NewTextHandler(f, &slog.HandlerOptions{Level: l})
-		}
-	} else {
-		handler = slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: l})
-	}
-	slog.SetDefault(slog.New(handler))
-}
-
 // NewModel creates an LLM model from the configuration.
 func NewModel(cfg *Config) (*llm.LiteLLMAdapter, error) {
 	model, err := llm.NewModel(cfg.Provider, cfg.Model,

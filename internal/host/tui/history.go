@@ -52,7 +52,7 @@ func formatHistoryCard(card domain.DrawnCard) string {
 	if name == "" {
 		name = "未知牌"
 	}
-	orient := "正位"
+	var orient string
 	switch card.Orientation {
 	case domain.Reversed:
 		orient = "逆位"

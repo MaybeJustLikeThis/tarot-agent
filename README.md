@@ -1,5 +1,7 @@
 # Tarot Agent
 
+[![CI](https://github.com/MaybeJustLikeThis/tarot-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/MaybeJustLikeThis/tarot-agent/actions/workflows/ci.yml)
+
 AI 塔罗占卜 CLI 工具。通过牌面的象征语言，帮助你重新审视自己的处境。
 
 > 塔罗是镜子，不是预言机。
@@ -17,6 +19,25 @@ AI 塔罗占卜 CLI 工具。通过牌面的象征语言，帮助你重新审视
 - 🔑 首次运行引导设置 API Key，自动验证连通性
 
 ## 安装
+
+### 预编译二进制
+
+仓库里已经有 `v0.1.0` 到 `v0.4.0` 这些 tag，但 [Releases](https://github.com/MaybeJustLikeThis/tarot-agent/releases) 上还没有附件。新推一个 `v*` tag 后，Release workflow 会上传 linux、macOS、Windows 的 amd64 和 arm64 包。Linux / macOS 是 tar.gz，Windows 是 zip。
+
+```bash
+# VERSION 换成 Releases 页上的 tag。文件名里的版本不带 v。
+VERSION=v0.5.0
+curl -sSL -o tarot-agent.tar.gz \
+  "https://github.com/MaybeJustLikeThis/tarot-agent/releases/download/${VERSION}/tarot-agent_${VERSION#v}_linux_amd64.tar.gz"
+tar -xzf tarot-agent.tar.gz
+./tarot-agent --version
+```
+
+macOS 把文件名里的 `linux` 换成 `darwin`。架构是 `amd64` 或 `arm64`。上面的 `v0.5.0` 只是写法示例，现在还没有这个版本。
+
+`go install github.com/MaybeJustLikeThis/tarot-agent/cmd/tarot-agent@latest` 目前不能用：`go.mod` 的 module 路径是 `github.com/voocel/tarot-agent`，和仓库路径不一致。
+
+### 从源码
 
 ```bash
 # 前置条件：Go 1.25.5（与 go.mod 一致，https://go.dev/doc/install）
@@ -86,7 +107,7 @@ export DEEPSEEK_API_KEY="sk-xxx"
 
 ## 配置
 
-API Key 写在 `~/.tarot-agent/config.json`，文件权限是 `0600`，目录是 `0700`。日志写到 `~/.tarot-agent/tarot.log`，避免刷在界面上。
+API Key 写在 `~/.tarot-agent/config.json`，文件权限是 `0600`，目录是 `0700`。日志写到 `~/.tarot-agent/tarot.log`。打不开日志文件时直接丢弃，不再写到 stderr，避免打乱界面。文件大约超过 1MB 时轮转，只保留上一份 `tarot.log.1`。
 
 合并顺序：内置默认值 < 配置文件 < 环境变量。`--mode` 再覆盖模式。
 
@@ -114,6 +135,7 @@ API Key 写在 `~/.tarot-agent/config.json`，文件权限是 `0600`，目录是
 ## 命令行
 
 ```bash
+./tarot-agent --version       # 打印版本后退出，不读取配置
 ./tarot-agent --mode=pro      # 专业模式，也可写 --mode=professional
 ./tarot-agent --mode=casual   # 轻松模式
 ```

@@ -9,17 +9,17 @@ import (
 
 func TestCard_Fields(t *testing.T) {
 	card := domain.Card{
-		ID:              "major_00",
-		NameCN:          "愚者",
-		NameEN:          "The Fool",
-		Arcana:          domain.MajorArcana,
-		Suit:            domain.SuitNone,
-		Number:          0,
-		UprightKeywords: []string{"新开始", "冒险", "天真", "自由", "信仰"},
+		ID:               "major_00",
+		NameCN:           "愚者",
+		NameEN:           "The Fool",
+		Arcana:           domain.MajorArcana,
+		Suit:             domain.SuitNone,
+		Number:           0,
+		UprightKeywords:  []string{"新开始", "冒险", "天真", "自由", "信仰"},
 		ReversedKeywords: []string{"鲁莽", "冒失", "恐惧未知", "不计后果", "停滞"},
-		UprightMeaning:  "新开始、冒险精神、天真无邪、自由、信仰的飞跃",
-		ReversedMeaning: "鲁莽行事、冒失、恐惧未知、不计后果、停滞不前",
-		ImageFile:       "00-fool.png",
+		UprightMeaning:   "新开始、冒险精神、天真无邪、自由、信仰的飞跃",
+		ReversedMeaning:  "鲁莽行事、冒失、恐惧未知、不计后果、停滞不前",
+		ImageFile:        "00-fool.png",
 	}
 
 	if card.NameCN != "愚者" {

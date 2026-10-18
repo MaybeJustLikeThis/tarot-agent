@@ -14,25 +14,6 @@ const (
 	cardHeight = 9
 )
 
-// renderCardBack renders a face-down card.
-func renderCardBack(width int) string {
-	style := lipgloss.NewStyle().
-		Width(cardWidth).
-		Height(cardHeight).
-		Align(lipgloss.Center, lipgloss.Center).
-		Border(lipgloss.DoubleBorder()).
-		BorderForeground(colorMuted)
-
-	inner := lipgloss.NewStyle().
-		Width(cardWidth-4).
-		Align(lipgloss.Center, lipgloss.Center).
-		Foreground(colorMuted)
-
-	pattern := inner.Render("✦\n\n?\n\n✦")
-
-	return style.Render(pattern)
-}
-
 // renderCardFront renders a face-up card with name and orientation.
 func renderCardFront(card domain.DrawnCard) string {
 	return renderCardFrontSized(card, cardWidth)

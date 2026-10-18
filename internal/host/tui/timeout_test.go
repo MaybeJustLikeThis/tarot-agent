@@ -27,8 +27,8 @@ func TestParseAgentTimeoutEnv(t *testing.T) {
 		t.Fatalf("empty: %s set=%v err=%v", d, set, err)
 	}
 	d, set, err = parseAgentTimeoutEnv("  ")
-	if err != nil || set {
-		t.Fatalf("blank: set=%v err=%v", set, err)
+	if err != nil || set || d != 0 {
+		t.Fatalf("blank: %s set=%v err=%v", d, set, err)
 	}
 	d, set, err = parseAgentTimeoutEnv("90")
 	if err != nil || !set || d != 90*time.Second {
@@ -39,8 +39,8 @@ func TestParseAgentTimeoutEnv(t *testing.T) {
 		t.Fatalf("duration: %s set=%v err=%v", d, set, err)
 	}
 	d, set, err = parseAgentTimeoutEnv("30m")
-	if err != nil || d != 30*time.Minute {
-		t.Fatalf("cap edge: %s err=%v", d, err)
+	if err != nil || !set || d != 30*time.Minute {
+		t.Fatalf("cap edge: %s set=%v err=%v", d, set, err)
 	}
 
 	for _, raw := range []string{"0", "-1s", "nope", "31m", "500ms"} {
