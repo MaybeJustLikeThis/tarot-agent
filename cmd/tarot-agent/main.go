@@ -94,5 +94,5 @@ func run() error {
 	}()
 
 	// Launch TUI
-	return tui.Run(result.Agent, result.Guard, s, result.Mode.Label())
+	return tui.Run(result.Agent, result.Guard, s, result.Mode.Label(), cfg.Model)
 }

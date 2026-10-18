@@ -47,7 +47,7 @@ func (s *InputState) Update(m *Model, msg tea.Msg) (State, tea.Cmd) {
 				m.resetReading()
 				m.resetChat()
 				if len(readings) > 0 {
-					m.readingVP.SetContent(renderMarkdown(readings[0].Interpretation, m.readingVP.Width-2))
+					m.readingVP.SetContent(renderMarkdown(renderHistoryDetail(readings[0]), m.readingVP.Width-2))
 				}
 				return &HistoryState{}, nil
 			}
@@ -224,17 +224,12 @@ func (s *ReadingState) Update(m *Model, msg tea.Msg) (State, tea.Cmd) {
 
 	case agentEndMsg:
 		m.bridge.cleanup()
-		m.readingContent = m.readingBuf.String()
-		m.readingBuf.Reset()
-		m.readingVP.SetContent(m.renderReadingMarkdown())
+		m.finishReading(nil)
 		return &FollowUpState{}, nil
 
 	case agentErrMsg:
 		m.bridge.cleanup()
-		m.readingContent = m.readingBuf.String()
-		m.readingBuf.Reset()
-		m.readingVP.SetContent(m.renderReadingMarkdown())
-		m.err = msg.err
+		m.finishReading(msg.err)
 		return &FollowUpState{}, nil
 	}
 
@@ -410,7 +405,7 @@ func (s *HistoryState) Update(m *Model, msg tea.Msg) (State, tea.Cmd) {
 func (s *HistoryState) updateViewport(m *Model) {
 	if m.historyCursor >= 0 && m.historyCursor < len(m.historyReadings) {
 		r := m.historyReadings[m.historyCursor]
-		m.readingVP.SetContent(renderMarkdown(r.Interpretation, m.readingVP.Width-2))
+		m.readingVP.SetContent(renderMarkdown(renderHistoryDetail(r), m.readingVP.Width-2))
 	}
 }
 
