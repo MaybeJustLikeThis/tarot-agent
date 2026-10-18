@@ -9,7 +9,7 @@
         "index": 0,
         "name_cn": "指引",
         "name_en": "Guidance",
-        "description": "对你当前 situation 的核心指引"
+        "description": "对你当前处境的核心指引"
       }
     ],
     "min_cards": 1,
@@ -19,19 +19,19 @@
     "id": "three_card",
     "name_cn": "三张牌",
     "name_en": "Three Card",
-    "description": "时间线展开，适合理解 situation 的发展脉络",
+    "description": "时间线展开，适合理解当前处境的发展脉络",
     "positions": [
       {
         "index": 0,
         "name_cn": "过去",
         "name_en": "Past",
-        "description": "影响当前 situation 的过去因素或根源"
+        "description": "影响当前处境的过去因素或根源"
       },
       {
         "index": 1,
         "name_cn": "现在",
         "name_en": "Present",
-        "description": "当前 situation 的核心能量或挑战"
+        "description": "当前处境的核心能量或挑战"
       },
       {
         "index": 2,
@@ -53,7 +53,7 @@
         "index": 0,
         "name_cn": "现状",
         "name_en": "Present",
-        "description": "你当前 situation 的核心"
+        "description": "你当前处境的核心"
       },
       {
         "index": 1,
@@ -65,7 +65,7 @@
         "index": 2,
         "name_cn": "根源",
         "name_en": "Root",
-        "description": "situation 的深层原因或潜意识影响"
+        "description": "当前处境的深层原因或潜意识影响"
       },
       {
         "index": 3,

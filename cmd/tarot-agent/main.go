@@ -42,21 +42,18 @@ func run() error {
 		}
 	}
 
-	// Command-line mode overrides config
-	if *modeFlag != "" {
-		switch *modeFlag {
-		case "pro":
-			cfg.Mode = "professional"
-		case "casual":
-			cfg.Mode = "casual"
-		default:
-			return fmt.Errorf("invalid mode %q: use 'pro' or 'casual'", *modeFlag)
-		}
+	mode, modeWarn := agents.ResolveMode(cfg.Mode, *modeFlag)
+	if modeWarn != "" {
+		fmt.Fprintf(os.Stderr, "%s\n", modeWarn)
 	}
+	cfg.Mode = string(mode)
 
 	// Initialize logger — write to file so it doesn't interfere with TUI
 	logPath := bootstrap.LogFilePath()
 	bootstrap.InitLogger(cfg.LogLevel, logPath)
+	if modeWarn != "" {
+		slog.Warn("invalid reading mode, using professional", "detail", modeWarn)
+	}
 	slog.Info("starting tarot-agent",
 		"provider", cfg.Provider,
 		"model", cfg.Model,
@@ -81,7 +78,6 @@ func run() error {
 	slog.Info("model initialized", "provider", cfg.Provider, "model", cfg.Model)
 
 	// Build agent
-	mode := agents.ParseMode(cfg.Mode)
 	result := agents.BuildAgent(model, s, mode)
 	slog.Info("agent built", "mode", mode.Label())
 

@@ -295,8 +295,14 @@ func (m *Model) View() string {
 	switch m.state.(type) {
 	case *SpreadState:
 		inputLabel = "选择牌阵 (1/2/3)："
-	case *FollowUpState, *ChatState:
-		inputLabel = "还有什么想问的？（回车开始新占卜）"
+	case *RevealState:
+		inputLabel = "正在翻牌"
+	case *ReadingState:
+		inputLabel = "正在解读"
+	case *FollowUpState:
+		inputLabel = "还有什么想问的？（空回车开始新占卜）"
+	case *ChatState:
+		inputLabel = "正在回答"
 	case *HistoryState:
 		inputLabel = "浏览历史记录（↑↓ 选择 · esc 返回）"
 	}

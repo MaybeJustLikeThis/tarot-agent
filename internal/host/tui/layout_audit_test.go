@@ -34,8 +34,8 @@ func TestLayoutAudit_LineWidthAndVisibility(t *testing.T) {
 				if spread == "three_card" && h >= 24 && (name == "reading" || name == "followup") && !strings.Contains(view, "╔") {
 					t.Errorf("%s: three-card layout lost card frames", label)
 				}
-				if (name == "reading" || name == "followup" || name == "chat") && !strings.Contains(view, "回车提交") {
-					t.Errorf("%s: input hint is off-screen", label)
+				if hint := bottomHintFor(name); hint != "" && !strings.Contains(view, hint) {
+					t.Errorf("%s: bottom hint %q is off-screen", label, hint)
 				}
 				if name == "history" {
 					assertHistoryQuestionOneLine(t, label, view)
@@ -143,6 +143,25 @@ func auditModel(t *testing.T, w, h int, spread, stateName string) *Model {
 	}
 	m.layoutHeights()
 	return m
+}
+
+func bottomHintFor(stateName string) string {
+	switch stateName {
+	case "input":
+		return "输入 q 回车退出"
+	case "spread":
+		return "esc 返回 · q 退出"
+	case "reading":
+		return "ctrl+c 退出"
+	case "followup":
+		return "tab 切换焦点"
+	case "chat":
+		return "ctrl+c 中止并退出"
+	case "history":
+		return "esc 返回"
+	default:
+		return ""
+	}
 }
 
 func assertHistoryQuestionOneLine(t *testing.T, label, view string) {
