@@ -1,10 +1,28 @@
 package store_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/voocel/tarot-agent/internal/store"
 )
+
+func TestSpreadDescriptionsAreChinese(t *testing.T) {
+	ss, err := store.NewSpreadStore(store.SpreadsJSON())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, spread := range ss.GetAll() {
+		if strings.Contains(spread.Description, "situation") {
+			t.Errorf("spread %s description still mixes in English: %s", spread.ID, spread.Description)
+		}
+		for _, pos := range spread.Positions {
+			if strings.Contains(pos.Description, "situation") {
+				t.Errorf("position %s/%s still mixes in English: %s", spread.ID, pos.NameCN, pos.Description)
+			}
+		}
+	}
+}
 
 func TestSpreadStore_LoadSpreads(t *testing.T) {
 	ss, err := store.NewSpreadStore(store.SpreadsJSON())

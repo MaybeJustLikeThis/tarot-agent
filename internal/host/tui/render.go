@@ -103,7 +103,23 @@ func renderSeparator(w int) string {
 // renderInputZone renders the bottom input area with label.
 func renderInputZone(m *Model, label string) string {
 	labelStyled := inputLabelStyle.Render("  " + label)
-	return labelStyled + "\n" + m.input.View() + "\n" + statusBarStyle.Render("  回车提交 · tab 历史 · ctrl+d 每日一牌 · q 退出")
+	return labelStyled + "\n" + m.input.View() + "\n" + statusBarStyle.Render("  "+inputHint(m))
+}
+
+// inputHint describes the keys that actually work in the current state.
+func inputHint(m *Model) string {
+	switch m.state.(type) {
+	case *RevealState:
+		return "翻牌中，请稍候"
+	case *ReadingState:
+		return "↑↓/jk 滚动 · ctrl+c 退出"
+	case *FollowUpState:
+		return "回车发送追问 · tab 切换焦点 · 输入 q 回车退出"
+	case *ChatState:
+		return "tab 切换焦点 · ctrl+c 中止并退出"
+	default:
+		return "回车提交 · 空输入 tab 历史 · ctrl+d 每日一牌 · 输入 q 回车退出"
+	}
 }
 
 // renderSpreadOptions renders spread selection UI.
@@ -112,7 +128,7 @@ func renderSpreadOptions(m *Model) string {
 	b.WriteString(spreadNumberStyle.Render("  1") + "  " + spreadDescStyle.Render("单张牌 — 快速指引") + "\n")
 	b.WriteString(spreadNumberStyle.Render("  2") + "  " + spreadDescStyle.Render("三张牌 — 过去 / 现在 / 未来") + "\n")
 	b.WriteString(spreadNumberStyle.Render("  3") + "  " + spreadDescStyle.Render("凯尔特十字 — 深度全面分析") + "\n")
-	b.WriteString(statusBarStyle.Render("  q 退出"))
+	b.WriteString(statusBarStyle.Render("  esc 返回 · q 退出"))
 	return b.String()
 }
 

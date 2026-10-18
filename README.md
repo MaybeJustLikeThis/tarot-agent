@@ -11,15 +11,15 @@ AI 塔罗占卜 CLI 工具。通过牌面的象征语言，帮助你重新审视
 - ✨ 逐张翻牌动画，还原真实占卜仪式感
 - 🤖 AI 深度解读 — 结合你的具体情境，不是模板复述
 - 💬 解读后可继续追问，深入探讨
-- 📖 历史记录浏览 — 随时回顾过去的占卜
+- 📖 历史记录浏览 — 保存并回顾完整解读（问题、牌阵、牌面、模型、正文）
 - 🌅 每日一牌 — 一键获取今日指引
-- 💾 占卜记录自动保存到本地
+- 💾 占卜记录在解读结束时写入本地，追问对话不另存
 - 🔑 首次运行引导设置 API Key，自动验证连通性
 
 ## 安装
 
 ```bash
-# 前置条件：Go 1.21+ (https://go.dev/doc/install)
+# 前置条件：Go 1.25.5（与 go.mod 一致，https://go.dev/doc/install）
 
 git clone https://github.com/MaybeJustLikeThis/tarot-agent.git
 cd tarot-agent
@@ -38,15 +38,28 @@ go run ./cmd/tarot-agent  # 或直接运行源码
 
 ## 快捷键
 
-| 按键 | 功能 |
-|------|------|
-| `Enter` | 提交问题 / 追问 |
-| `tab` | 查看历史记录（输入框为空时） |
-| `ctrl+d` | 每日一牌 |
-| `↑↓` / `jk` | 解读区滚动 |
-| `PgUp/PgDn` | 翻页 |
-| `esc` | 返回上一步 |
-| `q` | 退出 |
+按键行为随界面状态变化。下面的是实际会生效的操作，不是全局热键。
+
+| 状态 | 按键 | 功能 |
+|------|------|------|
+| 输入问题 | `Enter` | 提交问题。整段输入是 `q` / `quit` / `exit` / `退出` 时退出 |
+| 输入问题 | `tab` | 输入框为空时打开历史 |
+| 输入问题 | `ctrl+d` | 每日一牌 |
+| 选择牌阵 | `1` / `2` / `3` | 单张 / 三张 / 凯尔特十字 |
+| 选择牌阵 | `q` | 立刻退出 |
+| 选择牌阵 | `esc` | 返回输入问题 |
+| 解读中 | `↑↓` / `jk`、`PgUp` / `PgDn` | 滚动解读 |
+| 解读中 | `ctrl+c` | 中止本次解读并退出 |
+| 追问 | `Enter` | 发送追问；输入为空则开始新的占卜 |
+| 追问 | `tab` | 在解读区和对话区之间切换滚动焦点 |
+| 追问 | 输入 `q` 后回车 | 退出 |
+| 对话生成中 | `tab` | 切换解读 / 对话焦点 |
+| 对话生成中 | `ctrl+c` | 中止当前回答并退出 |
+| 历史 | `↑↓` / `jk` | 选择一条记录 |
+| 历史 | `PgUp` / `PgDn` | 滚动详情 |
+| 历史 | `esc` | 返回输入问题 |
+
+在输入问题或追问里，单独按 `q` 只会打进输入框，不会退出。
 
 ## 自定义 LLM
 
@@ -66,17 +79,44 @@ export TAROT_MODEL="claude-sonnet-4-20250514"
 # 使用自建代理
 export TAROT_BASE_URL="https://your-proxy.com/v1"
 export TAROT_API_KEY="sk-xxx"
+
+# 还没有配置文件时，只导出 DeepSeek key 也可以启动
+export DEEPSEEK_API_KEY="sk-xxx"
 ```
+
+## 配置
+
+API Key 写在 `~/.tarot-agent/config.json`，文件权限是 `0600`，目录是 `0700`。日志写到 `~/.tarot-agent/tarot.log`，避免刷在界面上。
+
+合并顺序：内置默认值 < 配置文件 < 环境变量。`--mode` 再覆盖模式。
+
+| 来源 | 说明 |
+|------|------|
+| `TAROT_API_KEY` | 只要设置了，就覆盖配置文件和 `DEEPSEEK_API_KEY` |
+| `DEEPSEEK_API_KEY` | 没有配置文件时可以单独用来启动。配置里如果已经保存了其他服务商的 key，它不会覆盖那把 key；当前服务商是 `deepseek` 时，会替换已保存的 DeepSeek key |
+| `--mode` | `pro`、`professional` 或 `casual`。非法值会警告并回退到专业模式，不会因此启动失败 |
 
 ## 环境变量
 
 | 变量 | 说明 | 默认值 |
 |------|------|--------|
 | `TAROT_PROVIDER` | AI 服务商：`deepseek` / `openai` / `anthropic` | `deepseek` |
-| `TAROT_API_KEY` | API Key | 无（首次引导设置） |
+| `TAROT_API_KEY` | API Key，优先级最高 | 无（首次引导设置，或只用 `DEEPSEEK_API_KEY`） |
+| `DEEPSEEK_API_KEY` | 见上一节。不能替换其他服务商已保存的 key | 无 |
 | `TAROT_BASE_URL` | API 地址 | 按 provider 自动选择 |
 | `TAROT_MODEL` | 模型名 | 按 provider 自动选择 |
-| `TAROT_MODE` | 解读模式：`professional` / `casual` | `professional` |
+| `TAROT_MODE` | 解读模式：`professional`、`pro` 或 `casual`，与 `--mode` 互通 | `professional` |
+| `TAROT_LOG_LEVEL` | `debug` / `info` / `warn` / `error` | `info` |
+| `TAROT_AGENT_TIMEOUT` | 单次解读的墙钟上限。可用 `5m`、`90s` 或纯秒数。未设置时单张牌和三张牌是 120 秒，凯尔特十字是 5 分钟。至少 1 秒，最多 30 分钟；非法值会在进入界面前报错 | 按牌阵 |
+
+历史记录在解读结束时写入一条完整记录：问题、牌阵、每张牌的位置和正逆位、模型名，以及你看到的整段解读。追问不会追加进这条记录。
+
+## 命令行
+
+```bash
+./tarot-agent --mode=pro      # 专业模式，也可写 --mode=professional
+./tarot-agent --mode=casual   # 轻松模式
+```
 
 ## License
 

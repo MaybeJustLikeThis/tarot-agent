@@ -74,11 +74,7 @@ func LoadConfig() (*Config, error) {
 	if v := os.Getenv("TAROT_PROVIDER"); v != "" {
 		cfg.Provider = v
 	}
-	if v := os.Getenv("TAROT_API_KEY"); v != "" {
-		cfg.APIKey = v
-	} else if v := os.Getenv("DEEPSEEK_API_KEY"); v != "" {
-		cfg.APIKey = v
-	}
+	cfg.APIKey = resolveAPIKey(cfg.APIKey, cfg.Provider, os.Getenv("TAROT_API_KEY"), os.Getenv("DEEPSEEK_API_KEY"))
 
 	if v := os.Getenv("TAROT_BASE_URL"); v != "" {
 		cfg.BaseURL = v
@@ -98,6 +94,20 @@ func LoadConfig() (*Config, error) {
 	}
 
 	return cfg, nil
+}
+
+// resolveAPIKey chooses the API key after the config file and TAROT_PROVIDER are applied.
+// TAROT_API_KEY always wins. DEEPSEEK_API_KEY starts a session when no key is saved,
+// and replaces a saved key only when the effective provider is DeepSeek.
+// It does not overwrite another provider's saved key.
+func resolveAPIKey(savedKey, provider, tarotKey, deepseekKey string) string {
+	if tarotKey != "" {
+		return tarotKey
+	}
+	if deepseekKey != "" && (savedKey == "" || provider == "" || provider == "deepseek") {
+		return deepseekKey
+	}
+	return savedKey
 }
 
 // LogFilePath returns the path to the log file (~/.tarot-agent/tarot.log).

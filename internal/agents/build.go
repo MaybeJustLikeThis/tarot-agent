@@ -2,7 +2,9 @@ package agents
 
 import (
 	_ "embed"
+	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/voocel/agentcore"
 	"github.com/voocel/agentcore/llm"
@@ -30,12 +32,39 @@ const (
 	ModeCasual       AgentMode = "casual"
 )
 
+// NormalizeMode accepts the existing spellings and reports whether raw was valid.
+// Empty, "pro", and "professional" are professional. "casual" is casual.
+// Any other non-empty value is invalid and falls back to professional.
+func NormalizeMode(raw string) (AgentMode, bool) {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "", "pro", "professional":
+		return ModeProfessional, true
+	case "casual":
+		return ModeCasual, true
+	default:
+		return ModeProfessional, false
+	}
+}
+
 // ParseMode converts a string to AgentMode, defaulting to professional.
 func ParseMode(s string) AgentMode {
-	if s == "casual" {
-		return ModeCasual
+	mode, _ := NormalizeMode(s)
+	return mode
+}
+
+// ResolveMode applies a configured mode and an optional --mode flag.
+// The flag wins when it is non-empty. Invalid values fall back to professional
+// and return a warning instead of failing startup.
+func ResolveMode(configured, flag string) (AgentMode, string) {
+	raw := configured
+	if strings.TrimSpace(flag) != "" {
+		raw = flag
 	}
-	return ModeProfessional
+	mode, ok := NormalizeMode(raw)
+	if ok {
+		return mode, ""
+	}
+	return mode, fmt.Sprintf("警告: 解读模式 %q 无效，已回退到专业模式（可用 professional、pro 或 casual）", strings.TrimSpace(raw))
 }
 
 // Label returns the Chinese display name for the mode.
