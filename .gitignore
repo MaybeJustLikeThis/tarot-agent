@@ -31,8 +31,10 @@ docs/
 testdata/
 internal/host/tui/testdata/
 
-# Config (contains API keys)
-~/.tarot-agent/
+# Config (contains API keys). Git does not expand ~, so this cannot
+# match the home directory. Ignore a checkout-local copy instead.
+.tarot-agent/
+dist/
 store.out
 coverage.out
 debug.log

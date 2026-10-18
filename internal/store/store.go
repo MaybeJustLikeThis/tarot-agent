@@ -113,9 +113,9 @@ type SuitInfo struct {
 
 // ElementKnowledge holds global tarot knowledge about elements, suits, and numerology.
 type ElementKnowledge struct {
-	Interactions map[string]string  `json:"interactions"`
+	Interactions map[string]string   `json:"interactions"`
 	SuitMeanings map[string]SuitInfo `json:"suit_meanings"`
-	Numerology   map[string]string  `json:"numerology"`
+	Numerology   map[string]string   `json:"numerology"`
 }
 
 // NewElementKnowledge loads element knowledge from JSON data.
@@ -229,7 +229,6 @@ func (ss *SpreadStore) GetAll() []domain.Spread {
 
 // Store aggregates all sub-stores.
 type Store struct {
-	io       *IO
 	Cards    *CardStore
 	Spreads  *SpreadStore
 	Readings *ReadingStore
@@ -238,8 +237,6 @@ type Store struct {
 
 // New creates and initializes all sub-stores from embedded data.
 func New() (*Store, error) {
-	io := NewIO()
-
 	cards, err := NewCardStore(
 		majorArcanaJSON,
 		minorWandsJSON,
@@ -267,7 +264,6 @@ func New() (*Store, error) {
 	}
 
 	return &Store{
-		io:       io,
 		Cards:    cards,
 		Spreads:  spreads,
 		Readings: NewReadingStore(readingsPath),

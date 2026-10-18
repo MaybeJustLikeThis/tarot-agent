@@ -31,25 +31,25 @@ const (
 
 // Card represents a single tarot card.
 type Card struct {
-	ID              string     `json:"id"`
-	NameCN          string     `json:"name_cn"`
-	NameEN          string     `json:"name_en"`
-	Arcana          ArcanaType `json:"arcana"`
-	Suit            Suit       `json:"suit"`
-	Number          int        `json:"number"`
-	UprightKeywords []string   `json:"upright_keywords"`
-	ReversedKeywords []string  `json:"reversed_keywords"`
-	UprightMeaning  string     `json:"upright_meaning"`
-	ReversedMeaning string     `json:"reversed_meaning"`
-	ImageFile        string           `json:"image_file"`
-	NameAliases      []string         `json:"name_aliases,omitempty"`
+	ID               string     `json:"id"`
+	NameCN           string     `json:"name_cn"`
+	NameEN           string     `json:"name_en"`
+	Arcana           ArcanaType `json:"arcana"`
+	Suit             Suit       `json:"suit"`
+	Number           int        `json:"number"`
+	UprightKeywords  []string   `json:"upright_keywords"`
+	ReversedKeywords []string   `json:"reversed_keywords"`
+	UprightMeaning   string     `json:"upright_meaning"`
+	ReversedMeaning  string     `json:"reversed_meaning"`
+	ImageFile        string     `json:"image_file"`
+	NameAliases      []string   `json:"name_aliases,omitempty"`
 	// Enriched fields (added for professional readings)
-	Element          string           `json:"element,omitempty"`
-	Astrology        *AstrologyInfo   `json:"astrology,omitempty"`
-	Numerology       *NumerologyInfo  `json:"numerology,omitempty"`
-	Imagery          string           `json:"imagery,omitempty"`
-	KeywordsContext  *KeywordsContext  `json:"keywords_context,omitempty"`
-	CourtRole        *CourtRole       `json:"court_role,omitempty"`
+	Element         string           `json:"element,omitempty"`
+	Astrology       *AstrologyInfo   `json:"astrology,omitempty"`
+	Numerology      *NumerologyInfo  `json:"numerology,omitempty"`
+	Imagery         string           `json:"imagery,omitempty"`
+	KeywordsContext *KeywordsContext `json:"keywords_context,omitempty"`
+	CourtRole       *CourtRole       `json:"court_role,omitempty"`
 }
 
 // AstrologyInfo holds astrological correspondences for a card.
@@ -109,8 +109,8 @@ type DrawnCard struct {
 
 // DrawResult holds the outcome of a card draw.
 type DrawResult struct {
-	SpreadID string       `json:"spread_id"`
-	Cards    []DrawnCard  `json:"cards"`
+	SpreadID string      `json:"spread_id"`
+	Cards    []DrawnCard `json:"cards"`
 }
 
 // Reading represents a complete tarot reading session.

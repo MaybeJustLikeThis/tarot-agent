@@ -1,0 +1,24 @@
+# Practical set: the v2 standard linters (unused, govet, staticcheck,
+# errcheck, ineffassign). Tests often ignore cleanup errors on purpose.
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  default: standard
+  exclusions:
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - path: _test\.go
+        linters:
+          - errcheck
+      # Deprecation renames in bubbles/viewport, and a quickfix to rewrite
+      # the setup prompt. Leaving both as they are keeps behavior unchanged.
+      - linters:
+          - staticcheck
+        text: "SA1019:|QF1003:"

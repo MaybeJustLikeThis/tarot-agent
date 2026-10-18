@@ -14,6 +14,10 @@ import (
 	"github.com/voocel/tarot-agent/internal/store"
 )
 
+// version is the release version. GoReleaser overrides it with
+// -X main.version={{.Version}}. Local builds stay "dev".
+var version = "dev"
+
 func main() {
 	if err := run(); err != nil {
 		fmt.Fprintf(os.Stderr, "fatal: %v\n", err)
@@ -23,7 +27,12 @@ func main() {
 
 func run() error {
 	modeFlag := flag.String("mode", "", "reading mode: 'pro' or 'casual'")
+	versionFlag := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
+	if *versionFlag {
+		fmt.Printf("tarot-agent %s\n", version)
+		return nil
+	}
 
 	var cfg *bootstrap.Config
 
