@@ -3,7 +3,7 @@ package store_test
 import (
 	"testing"
 
-	"github.com/voocel/tarot-agent/internal/store"
+	"github.com/MaybeJustLikeThis/tarot-agent/internal/store"
 )
 
 func TestCardStore_LoadAllCards(t *testing.T) {

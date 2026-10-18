@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MaybeJustLikeThis/tarot-agent/internal/domain"
+	"github.com/MaybeJustLikeThis/tarot-agent/internal/tools"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/voocel/tarot-agent/internal/domain"
-	"github.com/voocel/tarot-agent/internal/tools"
 )
 
 // layoutAuditSizes are the terminals we render by hand. Below 80×20 the

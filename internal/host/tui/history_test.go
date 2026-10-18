@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/voocel/tarot-agent/internal/domain"
-	"github.com/voocel/tarot-agent/internal/store"
+	"github.com/MaybeJustLikeThis/tarot-agent/internal/domain"
+	"github.com/MaybeJustLikeThis/tarot-agent/internal/store"
 )
 
 func newHistoryModel(t *testing.T) *Model {

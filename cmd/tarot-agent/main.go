@@ -8,10 +8,10 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/voocel/tarot-agent/internal/agents"
-	"github.com/voocel/tarot-agent/internal/bootstrap"
-	"github.com/voocel/tarot-agent/internal/host/tui"
-	"github.com/voocel/tarot-agent/internal/store"
+	"github.com/MaybeJustLikeThis/tarot-agent/internal/agents"
+	"github.com/MaybeJustLikeThis/tarot-agent/internal/bootstrap"
+	"github.com/MaybeJustLikeThis/tarot-agent/internal/host/tui"
+	"github.com/MaybeJustLikeThis/tarot-agent/internal/store"
 )
 
 // version is the release version. GoReleaser overrides it with

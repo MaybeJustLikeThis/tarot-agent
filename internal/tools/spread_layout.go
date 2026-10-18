@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/voocel/tarot-agent/internal/store"
+	"github.com/MaybeJustLikeThis/tarot-agent/internal/store"
 )
 
 // spreadLayoutTool implements agentcore.Tool for querying spread layouts.

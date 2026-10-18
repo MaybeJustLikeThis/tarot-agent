@@ -4,14 +4,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MaybeJustLikeThis/tarot-agent/internal/host/reminder"
+	"github.com/MaybeJustLikeThis/tarot-agent/internal/store"
+	"github.com/MaybeJustLikeThis/tarot-agent/internal/tools"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/voocel/agentcore"
-	"github.com/voocel/tarot-agent/internal/host/reminder"
-	"github.com/voocel/tarot-agent/internal/store"
-	"github.com/voocel/tarot-agent/internal/tools"
 )
 
 func lipglossWidth(s string) int { return lipgloss.Width(s) }

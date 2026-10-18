@@ -3,7 +3,7 @@ package tools
 import (
 	"testing"
 
-	"github.com/voocel/tarot-agent/internal/store"
+	"github.com/MaybeJustLikeThis/tarot-agent/internal/store"
 )
 
 func createStore(t *testing.T) *store.Store {

@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/voocel/tarot-agent/internal/domain"
-	"github.com/voocel/tarot-agent/internal/store"
+	"github.com/MaybeJustLikeThis/tarot-agent/internal/domain"
+	"github.com/MaybeJustLikeThis/tarot-agent/internal/store"
 )
 
 // cardMeaningTool implements agentcore.Tool for looking up card meanings.

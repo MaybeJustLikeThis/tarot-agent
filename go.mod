@@ -1,4 +1,4 @@
-module github.com/voocel/tarot-agent
+module github.com/MaybeJustLikeThis/tarot-agent
 
 go 1.25.5
 

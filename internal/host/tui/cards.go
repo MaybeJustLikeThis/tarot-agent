@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/MaybeJustLikeThis/tarot-agent/internal/domain"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/voocel/tarot-agent/internal/domain"
 )
 
 // Card dimensions

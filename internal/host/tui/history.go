@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/voocel/tarot-agent/internal/domain"
+	"github.com/MaybeJustLikeThis/tarot-agent/internal/domain"
 )
 
 // renderHistoryDetail formats a stored reading for the history viewport.

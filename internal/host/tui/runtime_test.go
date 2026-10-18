@@ -5,11 +5,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MaybeJustLikeThis/tarot-agent/internal/domain"
+	"github.com/MaybeJustLikeThis/tarot-agent/internal/store"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/voocel/agentcore"
-	"github.com/voocel/tarot-agent/internal/domain"
-	"github.com/voocel/tarot-agent/internal/store"
 )
 
 func TestPresentAgentError_MaxTurns(t *testing.T) {
