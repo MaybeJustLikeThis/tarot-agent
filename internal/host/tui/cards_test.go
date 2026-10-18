@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/voocel/tarot-agent/internal/domain"
+	"github.com/MaybeJustLikeThis/tarot-agent/internal/domain"
 )
 
 func TestFormatDrawnCards_IncludesIDOrientationAndPosition(t *testing.T) {

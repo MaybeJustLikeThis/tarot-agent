@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/MaybeJustLikeThis/tarot-agent/internal/host/reminder"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/voocel/agentcore"
-	"github.com/voocel/tarot-agent/internal/host/reminder"
 )
 
 // Agent event messages sent to the TUI event loop.

@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/voocel/tarot-agent/internal/domain"
+	"github.com/MaybeJustLikeThis/tarot-agent/internal/domain"
 )
 
 //go:embed assets/cards/major_arcana.json

@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/voocel/tarot-agent/internal/domain"
-	"github.com/voocel/tarot-agent/internal/store"
+	"github.com/MaybeJustLikeThis/tarot-agent/internal/domain"
+	"github.com/MaybeJustLikeThis/tarot-agent/internal/store"
 )
 
 func TestReadingStore_AppendAndList(t *testing.T) {

@@ -5,9 +5,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/MaybeJustLikeThis/tarot-agent/internal/tools"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/voocel/tarot-agent/internal/tools"
 )
 
 const revealDelay = 600 * time.Millisecond

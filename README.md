@@ -22,10 +22,9 @@ AI 塔罗占卜 CLI 工具。通过牌面的象征语言，帮助你重新审视
 
 ### 预编译二进制
 
-仓库里已经有 `v0.1.0` 到 `v0.4.0` 这些 tag，但 [Releases](https://github.com/MaybeJustLikeThis/tarot-agent/releases) 上还没有附件。新推一个 `v*` tag 后，Release workflow 会上传 linux、macOS、Windows 的 amd64 和 arm64 包。Linux / macOS 是 tar.gz，Windows 是 zip。
+[Releases](https://github.com/MaybeJustLikeThis/tarot-agent/releases) 提供 linux、macOS、Windows 的 amd64 和 arm64 包。Linux / macOS 是 tar.gz，Windows 是 zip。
 
 ```bash
-# VERSION 换成 Releases 页上的 tag。文件名里的版本不带 v。
 VERSION=v0.5.0
 curl -sSL -o tarot-agent.tar.gz \
   "https://github.com/MaybeJustLikeThis/tarot-agent/releases/download/${VERSION}/tarot-agent_${VERSION#v}_linux_amd64.tar.gz"
@@ -33,9 +32,13 @@ tar -xzf tarot-agent.tar.gz
 ./tarot-agent --version
 ```
 
-macOS 把文件名里的 `linux` 换成 `darwin`。架构是 `amd64` 或 `arm64`。上面的 `v0.5.0` 只是写法示例，现在还没有这个版本。
+macOS 把文件名里的 `linux` 换成 `darwin`。架构是 `amd64` 或 `arm64`。
 
-`go install github.com/MaybeJustLikeThis/tarot-agent/cmd/tarot-agent@latest` 目前不能用：`go.mod` 的 module 路径是 `github.com/voocel/tarot-agent`，和仓库路径不一致。
+用 Go 安装时，`v0.5.0` 及以后才带现在的 module 路径：
+
+```bash
+go install github.com/MaybeJustLikeThis/tarot-agent/cmd/tarot-agent@latest
+```
 
 ### 从源码
 

@@ -1,7 +1,9 @@
 package agents
 
-import "strings"
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestNormalizeMode(t *testing.T) {
 	cases := []struct {

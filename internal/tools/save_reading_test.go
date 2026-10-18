@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/voocel/tarot-agent/internal/store"
-	"github.com/voocel/tarot-agent/internal/tools"
+	"github.com/MaybeJustLikeThis/tarot-agent/internal/store"
+	"github.com/MaybeJustLikeThis/tarot-agent/internal/tools"
 )
 
 func newTestStore(t *testing.T) *store.Store {

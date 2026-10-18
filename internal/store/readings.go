@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/voocel/tarot-agent/internal/domain"
+	"github.com/MaybeJustLikeThis/tarot-agent/internal/domain"
 )
 
 // ReadingStore persists tarot reading records in JSONL format.
