@@ -24,7 +24,7 @@ func renderCardBack(width int) string {
 		BorderForeground(colorMuted)
 
 	inner := lipgloss.NewStyle().
-		Width(cardWidth - 4).
+		Width(cardWidth-4).
 		Align(lipgloss.Center, lipgloss.Center).
 		Foreground(colorMuted)
 
@@ -291,8 +291,8 @@ func formatDrawnCards(cards []domain.DrawnCard, spreadType string) string {
 		if card.Orientation == domain.Reversed {
 			orient = "逆位"
 		}
-		fmt.Fprintf(&b, "位置 %d（%s）：%s [%s] — %s\n",
-			i+1, label, card.Card.NameCN, orient, card.Card.NameEN)
+		fmt.Fprintf(&b, "位置 %d（%s）：%s [%s] — %s — id: %s\n",
+			i+1, label, card.Card.NameCN, orient, card.Card.NameEN, card.Card.ID)
 	}
 	return b.String()
 }
