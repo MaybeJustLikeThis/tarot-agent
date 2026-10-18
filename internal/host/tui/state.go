@@ -177,10 +177,10 @@ func (s *RevealState) View(m *Model) StateView {
 		sp := spinnerStyle.Render(m.spinner.View())
 		status := fmt.Sprintf(" 正在翻牌... (%d/%d)", m.revealIndex, len(m.drawResult.Cards))
 		content = sp + status + "\n\n"
-		content += renderSpreadLayout(m.drawResult.Cards, m.revealIndex, m.spreadType, m.layout.LeftWidth-4)
+		content += m.renderSpread(m.revealIndex, 3)
 	} else {
 		content = styleSuccess.Render("  ✦ 牌已全部翻开") + "\n\n"
-		content += renderSpreadLayout(m.drawResult.Cards, len(m.drawResult.Cards), m.spreadType, m.layout.LeftWidth-4)
+		content += m.renderSpread(len(m.drawResult.Cards), 3)
 	}
 
 	left := renderPanelTitle("牌面", colorAccent) + "\n" + content
@@ -200,7 +200,7 @@ func startInterpretation(m *Model) (State, tea.Cmd) {
 		m.userInput, m.spreadType, cardInfo,
 	)
 
-	m.bridge.setup(prompt)
+	m.bridge.setup(prompt, m.agentTimeout())
 	return &ReadingState{}, m.bridge.nextEvent()
 }
 
@@ -213,9 +213,19 @@ type ReadingState struct{}
 func (s *ReadingState) Update(m *Model, msg tea.Msg) (State, tea.Cmd) {
 	switch msg := msg.(type) {
 	case agentDeltaMsg:
+		m.retryNote = ""
 		m.readingBuf.WriteString(msg.text)
-		m.readingVP.SetContent(renderMarkdown(m.readingBuf.String(), m.readingVP.Width-2))
-		m.readingVP.GotoBottom()
+		return s, tea.Batch(m.scheduleStreamFlush(), m.bridge.nextEvent())
+
+	case streamFlushMsg:
+		if msg.gen != m.streamGen {
+			return s, nil
+		}
+		m.flushReadingPlain()
+		return s, nil
+
+	case agentRetryMsg:
+		m.retryNote = msg.note
 		return s, m.bridge.nextEvent()
 
 	case agentToolMsg:
@@ -236,7 +246,7 @@ func (s *ReadingState) Update(m *Model, msg tea.Msg) (State, tea.Cmd) {
 	if key, ok := msg.(tea.KeyMsg); ok {
 		switch key.String() {
 		case "ctrl+c":
-			return s, tea.Quit
+			return s, m.quitAgent()
 		case "up", "k":
 			m.readingVP.LineUp(1)
 		case "down", "j":
@@ -299,7 +309,7 @@ func (s *FollowUpState) Update(m *Model, msg tea.Msg) (State, tea.Cmd) {
 			m.input.Reset()
 			m.toolCalls = nil
 			m.err = nil
-			m.bridge.setup(input)
+			m.bridge.setup(input, m.agentTimeout())
 			return &ChatState{}, m.bridge.nextEvent()
 		}
 	}
@@ -321,9 +331,19 @@ type ChatState struct{}
 func (s *ChatState) Update(m *Model, msg tea.Msg) (State, tea.Cmd) {
 	switch msg := msg.(type) {
 	case agentDeltaMsg:
+		m.retryNote = ""
 		m.chatStreamBuf.WriteString(msg.text)
-		m.chatVP.SetContent(m.renderChatConversation(true))
-		m.chatVP.GotoBottom()
+		return s, tea.Batch(m.scheduleStreamFlush(), m.bridge.nextEvent())
+
+	case streamFlushMsg:
+		if msg.gen != m.streamGen {
+			return s, nil
+		}
+		m.flushChatPlain()
+		return s, nil
+
+	case agentRetryMsg:
+		m.retryNote = msg.note
 		return s, m.bridge.nextEvent()
 
 	case agentToolMsg:
@@ -332,12 +352,16 @@ func (s *ChatState) Update(m *Model, msg tea.Msg) (State, tea.Cmd) {
 
 	case agentEndMsg:
 		m.bridge.cleanup()
+		m.bumpStreamGen()
+		m.retryNote = ""
 		m.finalizeChatStream()
 		m.chatVP.SetContent(m.renderChatConversation(false))
 		return &FollowUpState{}, nil
 
 	case agentErrMsg:
 		m.bridge.cleanup()
+		m.bumpStreamGen()
+		m.retryNote = ""
 		m.finalizeChatStream()
 		m.chatVP.SetContent(m.renderChatConversation(false))
 		m.err = msg.err
@@ -347,7 +371,7 @@ func (s *ChatState) Update(m *Model, msg tea.Msg) (State, tea.Cmd) {
 	if key, ok := msg.(tea.KeyMsg); ok {
 		switch key.String() {
 		case "ctrl+c":
-			return s, tea.Quit
+			return s, m.quitAgent()
 		case "tab":
 			m.toggleFocus()
 		case "up", "k":
@@ -426,12 +450,12 @@ func (s *HistoryState) View(m *Model) StateView {
 			}
 			date := r.CreatedAt.Format("01/02 15:04")
 			spread := spreadDisplayName(r.SpreadID)
-			question := truncate(r.Question, 20)
-			line := fmt.Sprintf("%s%s %s — %s",
+			prefix := fmt.Sprintf("%s%s %s — ",
 				cursor,
 				styleSubtle.Render(date),
-				styleMuted.Render(spread),
-				question)
+				styleMuted.Render(spread))
+			question := truncateWidth(r.Question, historyQuestionWidth(m, prefix))
+			line := prefix + question
 			items += line + "\n"
 		}
 		left += listStyle.Render(items)
@@ -460,7 +484,7 @@ func isExitCmd(s string) bool {
 func renderReadingView(m *Model) StateView {
 	left := renderPanelTitle("牌面", colorAccent) + "\n"
 	if m.drawResult != nil {
-		left += renderSpreadLayout(m.drawResult.Cards, len(m.drawResult.Cards), m.spreadType, m.layout.LeftWidth-4)
+		left += m.renderSpread(len(m.drawResult.Cards), 1)
 	} else {
 		left += renderCentered(m.layout.BodyHeight-1, styleMuted.Render("等待抽牌..."))
 	}
@@ -475,7 +499,7 @@ func renderReadingView(m *Model) StateView {
 func renderSplitView(m *Model) StateView {
 	left := renderPanelTitle("牌面", colorAccent) + "\n"
 	if m.drawResult != nil {
-		left += renderSpreadLayout(m.drawResult.Cards, len(m.drawResult.Cards), m.spreadType, m.layout.LeftWidth-4)
+		left += m.renderSpread(len(m.drawResult.Cards), 1)
 	} else {
 		left += renderCentered(m.layout.BodyHeight-1, styleMuted.Render("等待抽牌..."))
 	}

@@ -10,8 +10,16 @@ import (
 )
 
 // Run starts the Bubble Tea TUI.
+// TAROT_AGENT_TIMEOUT, when set, overrides the per-spread wall-clock limit.
 func Run(agent *agentcore.Agent, guard *reminder.ReadingGuard, s *store.Store, mode, llmModel string) error {
+	override, set, err := parseAgentTimeoutEnv(os.Getenv("TAROT_AGENT_TIMEOUT"))
+	if err != nil {
+		return err
+	}
+
 	m := NewModel(agent, guard, s, mode, llmModel)
+	m.timeoutOverride = override
+	m.timeoutOverrideSet = set
 
 	p := tea.NewProgram(m,
 		tea.WithAltScreen(),
@@ -19,6 +27,6 @@ func Run(agent *agentcore.Agent, guard *reminder.ReadingGuard, s *store.Store, m
 		tea.WithOutput(os.Stderr),
 	)
 
-	_, err := p.Run()
+	_, err = p.Run()
 	return err
 }

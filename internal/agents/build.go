@@ -17,6 +17,11 @@ var systemPromptPro string
 //go:embed prompts/system_casual.md
 var systemPromptCasual string
 
+// maxAgentTurns is large enough for a normal Celtic cross.
+// 10 card meanings + spread + disclaimer + save + final text is about 14
+// turns when each tool call is its own turn; 30 leaves room for guard retries.
+const maxAgentTurns = 30
+
 // AgentMode controls the depth and style of tarot readings.
 type AgentMode string
 
@@ -67,7 +72,9 @@ func BuildAgent(model *llm.LiteLLMAdapter, s *store.Store, mode AgentMode) *Buil
 			tools.GetDisclaimerTool(),
 			tools.SaveReadingTool(s),
 		),
-		agentcore.WithMaxTurns(15),
+		// Celtic cross can spend one turn per card lookup, plus spread,
+		// disclaimer, save, the final reading, and a few guard retries.
+		agentcore.WithMaxTurns(maxAgentTurns),
 		agentcore.WithStopGuard(guardFunc),
 		agentcore.WithOnMessage(func(msg agentcore.AgentMessage) {
 			slog.Debug("agent message",

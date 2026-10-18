@@ -108,6 +108,8 @@ func snapshotCards(cards []domain.DrawnCard) []domain.DrawnCard {
 // finishReading snapshots the streamed interpretation and stores it once.
 // agentErr is the model failure, if this reading ended in error.
 func (m *Model) finishReading(agentErr error) {
+	m.bumpStreamGen()
+	m.retryNote = ""
 	m.readingContent = m.readingBuf.String()
 	m.readingBuf.Reset()
 	m.persistCurrentReading()

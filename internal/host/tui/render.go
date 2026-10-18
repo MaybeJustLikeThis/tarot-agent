@@ -23,7 +23,9 @@ func renderStatusBar(m *Model) string {
 
 	right := ""
 	stateName := stateDisplayName(m.state)
-	if m.spinnerOn() {
+	if m.retryNote != "" {
+		right = lipgloss.NewStyle().Foreground(colorAccent).Render("正在重试")
+	} else if m.spinnerOn() {
 		right = spinnerStyle.Render(m.spinner.View()) + " " + lipgloss.NewStyle().Foreground(colorAccent).Render(stateName)
 	} else if stateName != "" {
 		right = lipgloss.NewStyle().Foreground(colorSubtle).Render(stateName)
@@ -55,8 +57,10 @@ func renderLeftPanel(m *Model, content string) string {
 
 	// Content width = total width - 1 (right border)
 	panel := lipgloss.NewStyle().
-		Width(w - 1).
+		Width(w-1).
 		Height(h).
+		MaxWidth(w).
+		MaxHeight(h).
 		Border(lipgloss.NormalBorder(), false, true, false, false).
 		BorderForeground(colorBorder).
 		Render(content)
@@ -72,6 +76,8 @@ func renderRightPanel(m *Model, content string) string {
 	panel := lipgloss.NewStyle().
 		Width(w).
 		Height(h).
+		MaxWidth(w).
+		MaxHeight(h).
 		Render(content)
 
 	return panel
