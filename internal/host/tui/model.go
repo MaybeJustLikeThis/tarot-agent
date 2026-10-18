@@ -38,8 +38,8 @@ func (m *Model) layoutHeights() {
 
 	// Fixed heights — never measure dynamically to avoid layout jumps.
 	const (
-		topH  = 1 // status bar always 1 line
-		sepH  = 1 // separator between body and input
+		topH          = 1 // status bar always 1 line
+		sepH          = 1 // separator between body and input
 		inputHDefault = 8 // label(1) + textarea(max 6) + hint(1)
 		inputHSpread  = 5 // label(1) + 3 options + hint(1)
 		inputHHistory = 1 // single label line
@@ -139,13 +139,14 @@ type Model struct {
 
 	// Shared state accessible by all states
 	mode        string // "专业模式" or "轻松模式"
+	llmModel    string // provider model id, stored with each reading
 	userInput   string
 	spreadType  string
 	drawResult  *domain.DrawResult
 	revealIndex int
 
 	// Reading (decoupled from conversation)
-	readingContent string    // the AI's interpretation text
+	readingContent string          // the AI's interpretation text
 	readingBuf     strings.Builder // streaming buffer during ReadingState
 
 	// Chat conversation (decoupled from reading)
@@ -155,6 +156,9 @@ type Model struct {
 	toolCalls []string
 	err       error
 
+	// historyWritten is set after the current draw has been appended once.
+	historyWritten bool
+
 	// Focus zone for scroll control ("reading" or "chat")
 	focusZone string
 
@@ -163,7 +167,7 @@ type Model struct {
 	historyCursor   int
 }
 
-func NewModel(agent *agentcore.Agent, guard *reminder.ReadingGuard, s *store.Store, mode string) *Model {
+func NewModel(agent *agentcore.Agent, guard *reminder.ReadingGuard, s *store.Store, mode, llmModel string) *Model {
 	ta := textarea.New()
 	ta.Placeholder = "说说你的情况和想问的问题..."
 	ta.Focus()
@@ -185,6 +189,7 @@ func NewModel(agent *agentcore.Agent, guard *reminder.ReadingGuard, s *store.Sto
 		bridge:    newAgentBridge(agent, guard),
 		store:     s,
 		mode:      mode,
+		llmModel:  llmModel,
 		input:     ta,
 		readingVP: vp,
 		chatVP:    chatVP,
@@ -332,6 +337,7 @@ func (m *Model) resetReading() {
 	m.readingContent = ""
 	m.readingBuf.Reset()
 	m.readingVP.SetContent("")
+	m.historyWritten = false
 }
 
 // resetChat clears the chat conversation.

@@ -77,6 +77,8 @@ func (rs *ReadingStore) List(limit int) ([]domain.Reading, error) {
 
 	var all []domain.Reading
 	scanner := bufio.NewScanner(f)
+	// A full reading (interpretation plus ten cards) can exceed the default 64KiB token limit.
+	scanner.Buffer(make([]byte, 64*1024), 4<<20)
 	for scanner.Scan() {
 		line := scanner.Bytes()
 		if len(line) == 0 {

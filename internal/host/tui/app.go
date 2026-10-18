@@ -10,8 +10,8 @@ import (
 )
 
 // Run starts the Bubble Tea TUI.
-func Run(agent *agentcore.Agent, guard *reminder.ReadingGuard, s *store.Store, mode string) error {
-	m := NewModel(agent, guard, s, mode)
+func Run(agent *agentcore.Agent, guard *reminder.ReadingGuard, s *store.Store, mode, llmModel string) error {
+	m := NewModel(agent, guard, s, mode, llmModel)
 
 	p := tea.NewProgram(m,
 		tea.WithAltScreen(),
