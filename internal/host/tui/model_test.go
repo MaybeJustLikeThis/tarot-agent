@@ -34,6 +34,7 @@ func newTestModelSize(w, h int) *Model {
 	ta.Focus()
 	ta.SetWidth(w - 4)
 	ta.SetHeight(1)
+	ta.ShowLineNumbers = false
 
 	vp := viewport.New(w, h)
 
@@ -108,8 +109,8 @@ func TestView_TotalHeight_MatchesTerminal(t *testing.T) {
 // Test: layout body height is always positive and reasonable
 func TestLayout_BodyHeight_AlwaysPositive(t *testing.T) {
 	tests := []struct {
-		w, h       int
-		minBodyH   int
+		w, h     int
+		minBodyH int
 	}{
 		{120, 40, 20},
 		{80, 24, 10},

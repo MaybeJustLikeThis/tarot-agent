@@ -83,6 +83,41 @@ func wrapLine(line string, maxWidth int) []string {
 	return result
 }
 
+// wrapPlain wraps each line to maxWidth columns without markdown styling.
+func wrapPlain(text string, maxWidth int) string {
+	if maxWidth <= 0 {
+		return text
+	}
+	lines := strings.Split(text, "\n")
+	var out []string
+	for _, line := range lines {
+		out = append(out, wrapLine(line, maxWidth)...)
+	}
+	return strings.Join(out, "\n")
+}
+
+// truncateWidth shortens s to max display columns, appending an ellipsis when it cuts.
+func truncateWidth(s string, max int) string {
+	if max <= 0 || stringWidth(s) <= max {
+		return s
+	}
+	if max == 1 {
+		return "…"
+	}
+	var b strings.Builder
+	w := 0
+	for _, r := range s {
+		rw := runeWidth(r)
+		if w+rw > max-1 {
+			break
+		}
+		b.WriteRune(r)
+		w += rw
+	}
+	b.WriteString("…")
+	return b.String()
+}
+
 // stringWidth returns the display width of a string (CJK = 2 columns).
 func stringWidth(s string) int {
 	w := 0

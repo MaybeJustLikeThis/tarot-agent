@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textarea"
@@ -156,6 +157,18 @@ type Model struct {
 	toolCalls []string
 	err       error
 
+	// retryNote is a transient status, cleared when text resumes or the run ends.
+	retryNote string
+
+	// timeoutOverride is set when TAROT_AGENT_TIMEOUT parsed successfully.
+	timeoutOverride    time.Duration
+	timeoutOverrideSet bool
+
+	// streamGen invalidates a late plain-text flush after the final markdown render.
+	streamGen          int
+	streamFlushPending bool
+	spinnerActive      bool
+
 	// historyWritten is set after the current draw has been appended once.
 	historyWritten bool
 
@@ -198,6 +211,7 @@ func NewModel(agent *agentcore.Agent, guard *reminder.ReadingGuard, s *store.Sto
 }
 
 func (m *Model) Init() tea.Cmd {
+	m.spinnerActive = true
 	return tea.Batch(textarea.Blink, m.spinner.Tick)
 }
 
@@ -207,22 +221,30 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		m.input.SetWidth(msg.Width - 4)
-		m.layoutHeights() // measure + calculate + sync viewport
+		m.layoutHeights()
+		m.reflowViewports()
 		return m, nil
 
 	case spinner.TickMsg:
-		if m.spinnerOn() {
-			var cmd tea.Cmd
-			m.spinner, cmd = m.spinner.Update(msg)
-			return m, cmd
+		if !m.spinnerOn() {
+			m.spinnerActive = false
+			return m, nil
 		}
-		return m, nil
+		var cmd tea.Cmd
+		m.spinner, cmd = m.spinner.Update(msg)
+		m.spinnerActive = cmd != nil
+		return m, cmd
 	}
 
+	prevSpin := m.spinnerOn()
 	newState, cmd := m.state.Update(m, msg)
 	if newState != nil {
 		m.state = newState
-		m.layoutHeights() // recalculate layout for new state
+		m.layoutHeights()
+	}
+	if !prevSpin && m.spinnerOn() && !m.spinnerActive {
+		m.spinnerActive = true
+		cmd = tea.Batch(cmd, m.spinner.Tick)
 	}
 	return m, cmd
 }
@@ -288,10 +310,14 @@ func (m *Model) View() string {
 		b.WriteString(renderInputZone(m, inputLabel))
 	}
 
-	// 5. Error
+	// 5. Retry / error. These sit under the input so a running reading can show them.
+	if m.retryNote != "" {
+		b.WriteString("\n")
+		b.WriteString(styleMuted.Render(wrapPlain("  "+m.retryNote, m.layout.Width)))
+	}
 	if m.err != nil {
 		b.WriteString("\n")
-		b.WriteString(errorStyle.Render("  ⚠ " + m.err.Error()))
+		b.WriteString(errorStyle.Render(wrapPlain("  ⚠ "+m.err.Error(), m.layout.Width)))
 	}
 
 	return b.String()
@@ -334,10 +360,12 @@ func (m *Model) spinnerOn() bool {
 
 // resetReading clears the reading content.
 func (m *Model) resetReading() {
+	m.bumpStreamGen()
 	m.readingContent = ""
 	m.readingBuf.Reset()
 	m.readingVP.SetContent("")
 	m.historyWritten = false
+	m.retryNote = ""
 }
 
 // resetChat clears the chat conversation.
@@ -383,9 +411,8 @@ func (m *Model) toggleFocus() {
 	}
 }
 
-// renderChatConversation renders the full chat history for the viewport.
-// If streaming is true, includes the current stream buffer as the latest message.
-func (m *Model) renderChatConversation(streaming bool) string {
+// chatTranscript is the conversation plus the in-progress reply when streaming.
+func (m *Model) chatTranscript(streaming bool) string {
 	var b strings.Builder
 	for _, msg := range m.chatMessages {
 		if msg.Role == "user" {
@@ -397,7 +424,90 @@ func (m *Model) renderChatConversation(streaming bool) string {
 	if streaming && m.chatStreamBuf.Len() > 0 {
 		b.WriteString(m.chatStreamBuf.String())
 	}
-	return renderMarkdown(b.String(), m.chatVP.Width-2)
+	return b.String()
+}
+
+// renderChatConversation renders the full chat history for the viewport.
+// If streaming is true, includes the current stream buffer as the latest message.
+func (m *Model) renderChatConversation(streaming bool) string {
+	return renderMarkdown(m.chatTranscript(streaming), viewportWrapWidth(m.chatVP.Width))
+}
+
+const streamFlushInterval = 80 * time.Millisecond
+
+type streamFlushMsg struct{ gen int }
+
+func (m *Model) agentTimeout() time.Duration {
+	return agentTimeoutForSpread(m.spreadType, m.timeoutOverride, m.timeoutOverrideSet)
+}
+
+func (m *Model) scheduleStreamFlush() tea.Cmd {
+	if m.streamFlushPending {
+		return nil
+	}
+	m.streamFlushPending = true
+	gen := m.streamGen
+	return tea.Tick(streamFlushInterval, func(time.Time) tea.Msg {
+		return streamFlushMsg{gen: gen}
+	})
+}
+
+func (m *Model) bumpStreamGen() {
+	m.streamGen++
+	m.streamFlushPending = false
+}
+
+func (m *Model) flushReadingPlain() {
+	m.streamFlushPending = false
+	m.readingVP.SetContent(wrapPlain(m.readingBuf.String(), viewportWrapWidth(m.readingVP.Width)))
+	m.readingVP.GotoBottom()
+}
+
+func (m *Model) flushChatPlain() {
+	m.streamFlushPending = false
+	m.chatVP.SetContent(wrapPlain(m.chatTranscript(true), viewportWrapWidth(m.chatVP.Width)))
+	m.chatVP.GotoBottom()
+}
+
+func (m *Model) reflowViewports() {
+	switch m.state.(type) {
+	case *ReadingState:
+		if m.readingBuf.Len() > 0 {
+			m.flushReadingPlain()
+		}
+	case *ChatState:
+		if m.readingContent != "" {
+			m.readingVP.SetContent(m.renderReadingMarkdown())
+		}
+		m.flushChatPlain()
+	case *FollowUpState:
+		if m.readingContent != "" {
+			m.readingVP.SetContent(m.renderReadingMarkdown())
+		}
+		if len(m.chatMessages) > 0 || m.chatStreamBuf.Len() > 0 {
+			m.chatVP.SetContent(m.renderChatConversation(m.chatStreamBuf.Len() > 0))
+		}
+	case *HistoryState:
+		if m.historyCursor >= 0 && m.historyCursor < len(m.historyReadings) {
+			r := m.historyReadings[m.historyCursor]
+			m.readingVP.SetContent(renderMarkdown(renderHistoryDetail(r), viewportWrapWidth(m.readingVP.Width)))
+		}
+	}
+}
+
+func viewportWrapWidth(width int) int {
+	w := width - 2
+	if w < 1 {
+		return 1
+	}
+	return w
+}
+
+func (m *Model) quitAgent() tea.Cmd {
+	m.bumpStreamGen()
+	m.bridge.abort()
+	m.bridge.cleanup()
+	return tea.Quit
 }
 
 // lipglossHeight measures the rendered height of a string.
