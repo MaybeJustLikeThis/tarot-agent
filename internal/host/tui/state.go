@@ -445,7 +445,7 @@ func (s *FollowUpState) Update(m *Model, msg tea.Msg) (State, tea.Cmd) {
 			m.input.Reset()
 			m.toolCalls = nil
 			m.err = nil
-			m.bridge.setup(input, m.agentTimeout())
+			m.bridge.setup(m.nextFollowUpPrompt(input), m.agentTimeout())
 			return &ChatState{}, m.bridge.nextEvent()
 		}
 	}
@@ -491,6 +491,7 @@ func (s *ChatState) Update(m *Model, msg tea.Msg) (State, tea.Cmd) {
 		m.bumpStreamGen()
 		m.retryNote = ""
 		m.finalizeChatStream()
+		m.persistFollowUps()
 		m.chatVP.SetContent(m.renderChatConversation(false))
 		return &FollowUpState{}, nil
 
@@ -499,7 +500,12 @@ func (s *ChatState) Update(m *Model, msg tea.Msg) (State, tea.Cmd) {
 		m.bumpStreamGen()
 		m.retryNote = ""
 		m.finalizeChatStream()
+		m.persistFollowUps()
 		m.chatVP.SetContent(m.renderChatConversation(false))
+		if m.err != nil {
+			m.err = fmt.Errorf("%v；%w", msg.err, m.err)
+			return &FollowUpState{}, nil
+		}
 		m.err = msg.err
 		return &FollowUpState{}, nil
 	}
@@ -546,12 +552,14 @@ func (s *HistoryState) Update(m *Model, msg tea.Msg) (State, tea.Cmd) {
 		case "up", "k":
 			if m.historyCursor > 0 {
 				m.historyCursor--
+				m.err = nil
 				s.updateViewport(m)
 			}
 			return s, nil
 		case "down", "j":
 			if m.historyCursor < len(m.historyReadings)-1 {
 				m.historyCursor++
+				m.err = nil
 				s.updateViewport(m)
 			}
 			return s, nil
@@ -561,6 +569,13 @@ func (s *HistoryState) Update(m *Model, msg tea.Msg) (State, tea.Cmd) {
 		case "pgdown":
 			m.readingVP.HalfViewDown()
 			return s, nil
+		case "enter":
+			r, ok := selectedReading(m)
+			if !ok || len(r.Cards) == 0 {
+				return s, nil
+			}
+			m.resumeReading(r)
+			return &FollowUpState{}, nil
 		}
 	}
 	return s, nil
@@ -602,7 +617,7 @@ func (s *HistoryState) View(m *Model) StateView {
 	}
 
 	// Right: selected reading
-	scrollHint := styleSubtle.Render("  ↑↓/jk 滚动 · esc 返回")
+	scrollHint := styleSubtle.Render(historyScrollHint(m))
 	right := renderPanelTitle("解读详情", colorPrimary) + "\n" +
 		m.readingVP.View() + "\n" + scrollHint
 
