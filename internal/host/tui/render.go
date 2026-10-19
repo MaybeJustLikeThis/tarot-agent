@@ -124,7 +124,7 @@ func inputHint(m *Model) string {
 	case *CrisisState:
 		return "esc 返回，先不抽牌"
 	default:
-		return "回车提交 · 空输入 tab 历史 · ctrl+d 每日一牌 · 输入 q 回车退出"
+		return "回车提交 · 空输入 tab 历史 · ctrl+d 每日一牌 · card 查牌 · 输入 q 回车退出"
 	}
 }
 
