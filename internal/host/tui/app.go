@@ -22,6 +22,7 @@ func Run(agent *agentcore.Agent, guard *reminder.ReadingGuard, s *store.Store, m
 	m.checkUpdates = checkUpdate
 	m.timeoutOverride = override
 	m.timeoutOverrideSet = set
+	applyWelcome(m)
 
 	p := tea.NewProgram(m,
 		tea.WithAltScreen(),
