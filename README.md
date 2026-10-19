@@ -19,6 +19,7 @@ AI 塔罗占卜 CLI 工具。通过牌面的象征语言，帮助你重新审视
 - 🗂 选牌阵时，如果最近问过类似的问题，会提示上次的日期和牌面
 - 💾 占卜记录在解读结束时写入本地，追问对话不另存
 - 🔑 首次运行引导设置 API Key，自动验证连通性
+- ⬆️ 发布版启动时提示有新版本，不自动替换本机程序
 
 ## 安装
 
@@ -142,6 +143,7 @@ API Key 写在 `~/.tarot-agent/config.json`，文件权限是 `0600`，目录是
 | `TAROT_MODE` | 解读模式，与 `--mode` 互通：`professional`、`pro`、`deep`、`casual`、`simple` | `professional` |
 | `TAROT_LOG_LEVEL` | `debug` / `info` / `warn` / `error` | `info` |
 | `TAROT_AGENT_TIMEOUT` | 单次解读的墙钟上限。可用 `5m`、`90s` 或纯秒数。未设置时单张牌和三张牌是 120 秒，凯尔特十字是 5 分钟。至少 1 秒，最多 30 分钟；非法值会在进入界面前报错 | 按牌阵 |
+| `TAROT_AGENT_NO_UPDATE` | 设为 `1` 时，启动不检查新版本。`TAROT_NO_UPDATE=1` 效果相同 | 不设置 |
 
 历史记录在解读结束时写入一条完整记录：问题、牌阵、每张牌的位置和正逆位、模型名，以及你看到的整段解读。追问不会追加进这条记录。确认问题之后，会在最近 20 条里用中文二字重合度找一条相似问题。旧记录没有牌面，或者问题是「今日指引」，就跳过。对上了的话，选牌阵时提示上次的日期和牌，解读提示词里附上上次的牌面和可执行建议摘录。
 
@@ -152,15 +154,38 @@ API Key 写在 `~/.tarot-agent/config.json`，文件权限是 `0600`，目录是
 深入版会多讲元素和数字；简洁版用大白话，更短。界面上显示这两个名字。配置文件仍保存 `professional` 或 `casual`，已经写过的 `pro` / `casual` 不用改。历史记录不保存模式，旧记录照常打开。
 
 ```bash
-./tarot-agent --version       # 打印版本后退出，不读取配置
+./tarot-agent --version       # 打印版本后退出，不读取配置，也不检查更新
 ./tarot-agent --mode=pro      # 深入版，也可写 professional 或 deep
 ./tarot-agent --mode=casual   # 简洁版，也可写 simple
 ./tarot-agent daily           # 抽一张牌，打印牌名、正逆位和本地关键词，再要一句今日指引
 ./tarot-agent daily --mode=simple
 ./tarot-agent --mode=deep daily
+./tarot-agent --check-update  # 只比较 GitHub 最新 Release，然后退出
 ```
 
-`daily` 不进入界面，`ctrl+d` 仍是界面里的每日一牌。没有 API Key，或者模型请求失败时，只打印本地牌义并说明原因，退出码仍是 0。结果写入历史，问题记为「今日指引」，不参与上面的相似问题匹配。不写子命令时，启动方式和以前一样。
+`daily` 不进入界面，`ctrl+d` 仍是界面里的每日一牌。没有 API Key，或者模型请求失败时，只打印本地牌义并说明原因，退出码仍是 0。结果写入历史，问题记为「今日指引」，不参与上面的相似问题匹配。不写子命令时，启动方式和以前一样。`--version` 和 `daily` 不会在启动时检查更新。
+
+## 更新
+
+发布版启动后会在后台请求 `https://api.github.com/repos/MaybeJustLikeThis/tarot-agent/releases/latest`，最多等 3 秒，不带 token。只比较 `tag_name` 和本机 `main.version` 的 major.minor.patch（可以带或不带 `v`）。当前更旧时，输入页显示一两行：当前版本 → 最新 tag，并提示 `go install …@latest` 或到 GitHub Releases 下载。按任意键，或离开输入页，这行就消失，不挡抽牌。网络失败、限流、或 tag 无法解析时，启动过程不报错。
+
+`dev` 或空版本是本地构建，启动时不检查。要关掉发布版的启动检查：
+
+```bash
+export TAROT_AGENT_NO_UPDATE=1
+# 或
+export TAROT_NO_UPDATE=1
+```
+
+手动查看时用 `--check-update`。成功退出码是 0，会打印当前版本、最新版本、有没有更新，以及安装命令。检查失败（网络或接口错误）退出码是 1，并打印原因。这个开关不受上面的环境变量影响。
+
+程序不会自己替换已安装的文件。要更新就二选一：
+
+```bash
+go install github.com/MaybeJustLikeThis/tarot-agent/cmd/tarot-agent@latest
+```
+
+或从 [Releases](https://github.com/MaybeJustLikeThis/tarot-agent/releases) 下载对应系统的预编译包，替换你自己放的那个二进制。
 
 ## License
 

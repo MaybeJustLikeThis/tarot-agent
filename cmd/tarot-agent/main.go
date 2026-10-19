@@ -15,6 +15,7 @@ import (
 	"github.com/MaybeJustLikeThis/tarot-agent/internal/daily"
 	"github.com/MaybeJustLikeThis/tarot-agent/internal/host/tui"
 	"github.com/MaybeJustLikeThis/tarot-agent/internal/store"
+	"github.com/MaybeJustLikeThis/tarot-agent/internal/update"
 	"github.com/voocel/agentcore"
 )
 
@@ -41,7 +42,7 @@ func main() {
 }
 
 func run(args []string) error {
-	modeFlag, showVersion, dailyCmd, err := parseCLI(args)
+	modeFlag, showVersion, checkUpdate, dailyCmd, err := parseCLI(args)
 	if err != nil {
 		return err
 	}
@@ -49,27 +50,31 @@ func run(args []string) error {
 		fmt.Printf("tarot-agent %s\n", version)
 		return nil
 	}
+	if checkUpdate {
+		return runCheckUpdate()
+	}
 	if dailyCmd {
 		return runDaily(modeFlag)
 	}
 	return runTUI(modeFlag)
 }
 
-// parseCLI accepts --mode and --version before or after the daily command.
+// parseCLI accepts --mode, --version, and --check-update before or after daily.
 // Any other positional argument is left alone so a plain launch stays the same.
-func parseCLI(args []string) (mode string, showVersion, dailyCmd bool, err error) {
+func parseCLI(args []string) (mode string, showVersion, checkUpdate, dailyCmd bool, err error) {
 	flagArgs, dailyCmd := extractDaily(args)
 	fs := flag.NewFlagSet("tarot-agent", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	modeFlag := fs.String("mode", "", "reading mode: pro, professional, deep, casual, or simple")
 	versionFlag := fs.Bool("version", false, "print version and exit")
+	checkFlag := fs.Bool("check-update", false, "compare with the latest GitHub release and exit")
 	if perr := fs.Parse(flagArgs); perr != nil {
 		if perr == flag.ErrHelp {
-			return "", false, false, errFlagHelp
+			return "", false, false, false, errFlagHelp
 		}
-		return "", false, false, errFlagParse
+		return "", false, false, false, errFlagParse
 	}
-	return *modeFlag, *versionFlag, dailyCmd, nil
+	return *modeFlag, *versionFlag, *checkFlag, dailyCmd, nil
 }
 
 func extractDaily(args []string) ([]string, bool) {
@@ -150,8 +155,19 @@ func runTUI(modeFlag string) error {
 		result.Agent.Abort()
 	}()
 
-	// Launch TUI
-	return tui.Run(result.Agent, result.Guard, s, result.Mode.Label(), cfg.Model)
+	// Launch TUI. Version and daily return earlier, so they do not check for updates.
+	return tui.Run(result.Agent, result.Guard, s, result.Mode.Label(), cfg.Model, version, update.StartupEnabled(version, os.Getenv))
+}
+
+func runCheckUpdate() error {
+	ctx, cancel := context.WithTimeout(context.Background(), update.CheckTimeout)
+	defer cancel()
+	res, err := update.Check(ctx, nil, version)
+	if err != nil {
+		return fmt.Errorf("检查更新失败：%w", err)
+	}
+	fmt.Print(update.FormatReport(res))
+	return nil
 }
 
 func runDaily(modeFlag string) error {

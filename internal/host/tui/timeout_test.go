@@ -63,7 +63,7 @@ func TestTimeoutAndMaxTurnsMessages(t *testing.T) {
 
 func TestRunRejectsBadTimeout(t *testing.T) {
 	t.Setenv("TAROT_AGENT_TIMEOUT", "nope")
-	err := Run(nil, nil, nil, "", "")
+	err := Run(nil, nil, nil, "", "", "", false)
 	if err == nil || !strings.Contains(err.Error(), "TAROT_AGENT_TIMEOUT") {
 		t.Fatalf("got %v", err)
 	}
