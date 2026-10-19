@@ -7,6 +7,7 @@ import (
 
 	"github.com/MaybeJustLikeThis/tarot-agent/internal/domain"
 	"github.com/MaybeJustLikeThis/tarot-agent/internal/store"
+	"github.com/charmbracelet/lipgloss"
 )
 
 func newHistoryModel(t *testing.T) *Model {
@@ -60,6 +61,30 @@ func TestRenderHistoryDetail_FullReading(t *testing.T) {
 		if !strings.Contains(text, want) {
 			t.Errorf("detail missing %q\n%s", want, text)
 		}
+	}
+}
+
+func TestHistoryDetailLongEnglishWraps(t *testing.T) {
+	text := renderHistoryDetail(domain.Reading{
+		Question: strings.Repeat("事业与感情", 12),
+		Cards: []domain.DrawnCard{{
+			Card:        domain.Card{ID: "minor_pentacles_12", NameCN: "星币骑士", NameEN: "Knight of Pentacles"},
+			Orientation: domain.Upright,
+			Position:    domain.Position{NameCN: "过去"},
+		}},
+	})
+	question := truncateWidth(strings.Repeat("事业与感情", 12), 16)
+	if strings.Contains(question, "\n") || lipgloss.Width(question) > 16 || !strings.Contains(question, "…") {
+		t.Fatalf("question line %q width %d", question, lipgloss.Width(question))
+	}
+	rendered := renderMarkdown(text, 22)
+	for i, line := range strings.Split(rendered, "\n") {
+		if lipgloss.Width(line) > 22 {
+			t.Errorf("detail line %d width %d: %q", i, lipgloss.Width(line), line)
+		}
+	}
+	if !strings.Contains(text, "Knight of Pentacles") {
+		t.Fatal("stored english name was dropped")
 	}
 }
 

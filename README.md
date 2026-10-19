@@ -28,7 +28,7 @@ AI 塔罗占卜 CLI 工具。通过牌面的象征语言，帮助你重新审视
 [Releases](https://github.com/MaybeJustLikeThis/tarot-agent/releases) 提供 linux、macOS、Windows 的 amd64 和 arm64 包。Linux / macOS 是 tar.gz，Windows 是 zip。
 
 ```bash
-VERSION=v0.5.0
+VERSION=v0.6.0
 curl -sSL -o tarot-agent.tar.gz \
   "https://github.com/MaybeJustLikeThis/tarot-agent/releases/download/${VERSION}/tarot-agent_${VERSION#v}_linux_amd64.tar.gz"
 tar -xzf tarot-agent.tar.gz
@@ -192,7 +192,7 @@ export TAROT_NO_UPDATE=1
 安装顺序看你现在跑的是不是发布版，避免本机有 Go 时把新文件装进 GOBIN、正在用的那个却还是旧的：
 
 1. 当前版本能解析成 major.minor.patch（Releases 里的预编译包）时，先下载当前平台的包（linux / macOS / Windows，amd64 / arm64；Windows 是 zip，其他是 tar.gz），有 `checksums.txt` 就核对 sha256，再替换 `os.Executable()` 指向的文件。替换失败才改跑 `go install …@<tag>`。这一步也失败，才打印 `curl`、解压和移动命令，退出码 1。Windows 不能覆盖正在运行的 exe，会把新文件写到旁边的 `.new`，并提示退出后替换。
-2. 当前是 `dev`、空版本或无法解析时，先执行 `go install github.com/MaybeJustLikeThis/tarot-agent/cmd/tarot-agent@<tag>`，然后打印 `which` 和 `tarot-agent --version`。`go install` 没有打进发布版本号时，`--version` 仍可能显示 `dev`，但代码已是该 tag。没有 `go`，或 `go install` 失败，再走上面的预编译包替换。
+2. 当前是 `dev`、空版本或无法解析时，先执行 `go install github.com/MaybeJustLikeThis/tarot-agent/cmd/tarot-agent@<tag>`，然后打印 `which` 和 `tarot-agent --version`。`go install @v0.6.0` 会从模块版本读出 `0.6.0`。本地 `go build` 没有版本信息时仍显示 `dev`。没有 `go`，或 `go install` 失败，再走上面的预编译包替换。
 
 也可以自己从 [Releases](https://github.com/MaybeJustLikeThis/tarot-agent/releases) 下载对应系统的包，对照 `checksums.txt` 后替换原来的二进制。或者：
 

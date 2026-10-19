@@ -31,8 +31,21 @@ func TestLayoutAudit_LineWidthAndVisibility(t *testing.T) {
 				if name == "reading" || name == "reveal" || name == "followup" {
 					assertCardsVisible(t, label, view, spread, name)
 				}
-				if spread == "three_card" && h >= 24 && (name == "reading" || name == "followup") && !strings.Contains(view, "╔") {
-					t.Errorf("%s: three-card layout lost card frames", label)
+				if spread == "three_card" && (name == "reading" || name == "followup") {
+					if h >= 24 && !strings.Contains(view, "╔") {
+						t.Errorf("%s: three-card layout lost card frames", label)
+					}
+					if w == 80 && h == 20 {
+						fitted := renderSpreadForPanel(m.drawResult.Cards, len(m.drawResult.Cards), "three_card", m.spreadContentWidth(), m.spreadContentHeight(1))
+						if strings.Contains(fitted, "╔") && !strings.Contains(view, "╔") {
+							t.Errorf("%s: panel can hold card frames", label)
+						}
+						for _, lab := range []string{"过去", "现在", "未来"} {
+							if !strings.Contains(view, lab) {
+								t.Errorf("%s: missing %s", label, lab)
+							}
+						}
+					}
 				}
 				if hint := bottomHintFor(name); hint != "" && !strings.Contains(view, hint) {
 					t.Errorf("%s: bottom hint %q is off-screen", label, hint)

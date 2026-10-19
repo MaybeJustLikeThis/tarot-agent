@@ -74,25 +74,17 @@ func renderSingleLayout(cards []domain.DrawnCard, revealed int, maxW int) string
 
 // renderThreeCardLayout renders three cards, adapting width to fit.
 func renderThreeCardLayout(cards []domain.DrawnCard, revealed int, maxW int) string {
-	labels := []string{"过去", "现在", "未来"}
+	return renderThreeCardLayoutH(cards, revealed, maxW, 0)
+}
 
-	// Calculate card width to fit: maxW = cardW * 3 + gaps
-	gaps := 2 // 2 spaces between 3 cards
-	cardW := (maxW - gaps) / 3
-	if cardW < cardWidth {
-		cardW = maxI(10, cardW) // minimum 10 chars wide
-	}
-	if cardW > cardWidth {
-		cardW = cardWidth // don't exceed default
-	}
-
+func renderThreeCardRows(cards []domain.DrawnCard, revealed, cardW, innerH int, labels []string) string {
 	var rendered []string
 	for i := 0; i < 3; i++ {
 		var card string
-		if i < revealed {
-			card = renderCardFrontSized(cards[i], cardW)
+		if i < revealed && i < len(cards) {
+			card = renderCardFrontSizedH(cards[i], cardW, innerH)
 		} else {
-			card = renderCardPlaceholderSized(cardW)
+			card = renderCardPlaceholderSizedH(cardW, innerH)
 		}
 
 		labelStyle := lipgloss.NewStyle().
@@ -216,11 +208,42 @@ func renderSpreadForPanel(cards []domain.DrawnCard, revealed int, spreadType str
 	if spreadType == "celtic_cross" {
 		return renderCelticFitted(cards, revealed, maxW, maxH)
 	}
+	if spreadType == "three_card" {
+		return renderThreeFitted(cards, revealed, maxW, maxH)
+	}
 	layout := renderSpreadLayout(cards, revealed, spreadType, maxW)
 	if maxH > 0 && lipgloss.Height(layout) > maxH {
 		return renderCardsCompact(cards, revealed, spreadType, maxW, maxH)
 	}
 	return layout
+}
+
+// renderThreeFitted shrinks the card interior before dropping to a text list.
+// The steps match the Celtic cross ladder so a short terminal can keep frames.
+func renderThreeFitted(cards []domain.DrawnCard, revealed, maxW, maxH int) string {
+	if maxH <= 0 {
+		return renderThreeCardLayout(cards, revealed, maxW)
+	}
+	for _, inner := range []int{9, 7, 5, 3} {
+		rendered := strings.TrimRight(renderThreeCardLayoutH(cards, revealed, maxW, inner), "\n")
+		if rendered != "" && lipgloss.Height(rendered) <= maxH {
+			return rendered
+		}
+	}
+	return renderCardsCompact(cards, revealed, "three_card", maxW, maxH)
+}
+
+func renderThreeCardLayoutH(cards []domain.DrawnCard, revealed, maxW, innerH int) string {
+	labels := []string{"过去", "现在", "未来"}
+	gaps := 2
+	cardW := (maxW - gaps) / 3
+	if cardW < cardWidth {
+		cardW = maxI(10, cardW)
+	}
+	if cardW > cardWidth {
+		cardW = cardWidth
+	}
+	return renderThreeCardRows(cards, revealed, cardW, innerH, labels)
 }
 
 func renderCelticFitted(cards []domain.DrawnCard, revealed, maxW, maxH int) string {
@@ -345,17 +368,32 @@ func renderCardFrontSizedH(card domain.DrawnCard, w, innerH int) string {
 		Width(innerW).
 		Align(lipgloss.Center)
 
-	maxNameLen := innerW
-	if maxNameLen < 3 {
-		maxNameLen = 3
+	var lines []string
+	// A very narrow face keeps the Chinese name and orientation only.
+	if innerW >= 6 {
+		lines = append(lines, symbolStyle.Render(orientSymbol))
 	}
-	content := lipgloss.JoinVertical(lipgloss.Center,
-		symbolStyle.Render(orientSymbol),
-		nameStyle.Render(truncate(card.Card.NameCN, maxNameLen)),
-		orientStyle.Render(orientText),
-		nameStyle.Render(truncate(card.Card.NameEN, maxNameLen)),
+	lines = append(lines,
+		nameStyle.Render(fitCardName(card.Card.NameCN, innerW)),
+		orientStyle.Render(fitCardName(orientText, innerW)),
 	)
-	return style.Render(content)
+	if en := strings.TrimSpace(card.Card.NameEN); innerW >= 6 && en != "" && stringWidth(en) <= innerW {
+		lines = append(lines, nameStyle.Render(en))
+	}
+	return style.Render(lipgloss.JoinVertical(lipgloss.Center, lines...))
+}
+
+// fitCardName keeps a label that fits the face. Chinese names are shortened
+// by display width only when they themselves do not fit.
+func fitCardName(name string, innerW int) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return ""
+	}
+	if stringWidth(name) <= innerW {
+		return name
+	}
+	return truncateWidth(name, innerW)
 }
 
 func renderCardPlaceholderSizedH(w, innerH int) string {
@@ -456,15 +494,6 @@ func compactCardLines(cards []domain.DrawnCard, revealed int, spreadType string,
 		lines = append(lines, truncateWidth(line, maxW))
 	}
 	return lines
-}
-
-// truncate truncates a string to maxLen characters.
-func truncate(s string, maxLen int) string {
-	runes := []rune(s)
-	if len(runes) <= maxLen {
-		return s
-	}
-	return string(runes[:maxLen-1]) + "…"
 }
 
 // spreadLabels returns position labels for a spread type.
