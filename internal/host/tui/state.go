@@ -553,6 +553,7 @@ func (s *HistoryState) Update(m *Model, msg tea.Msg) (State, tea.Cmd) {
 			if m.historyCursor > 0 {
 				m.historyCursor--
 				m.err = nil
+				m.exportNote = ""
 				s.updateViewport(m)
 			}
 			return s, nil
@@ -560,6 +561,7 @@ func (s *HistoryState) Update(m *Model, msg tea.Msg) (State, tea.Cmd) {
 			if m.historyCursor < len(m.historyReadings)-1 {
 				m.historyCursor++
 				m.err = nil
+				m.exportNote = ""
 				s.updateViewport(m)
 			}
 			return s, nil
@@ -568,6 +570,9 @@ func (s *HistoryState) Update(m *Model, msg tea.Msg) (State, tea.Cmd) {
 			return s, nil
 		case "pgdown":
 			m.readingVP.HalfViewDown()
+			return s, nil
+		case "e", "E":
+			m.exportSelectedReading()
 			return s, nil
 		case "enter":
 			r, ok := selectedReading(m)
@@ -617,7 +622,7 @@ func (s *HistoryState) View(m *Model) StateView {
 	}
 
 	// Right: selected reading
-	scrollHint := styleSubtle.Render(historyScrollHint(m))
+	scrollHint := styleSubtle.Render(historyScrollHint())
 	right := renderPanelTitle("解读详情", colorPrimary) + "\n" +
 		m.readingVP.View() + "\n" + scrollHint
 

@@ -10,6 +10,7 @@ import (
 	"github.com/MaybeJustLikeThis/tarot-agent/internal/store"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"os"
 )
 
 func newHistoryModel(t *testing.T) *Model {
@@ -429,9 +430,81 @@ func TestHistoryView_LegacyRecord(t *testing.T) {
 	(&HistoryState{}).updateViewport(m)
 
 	view := m.View()
-	for _, want := range []string{"旧问题", "（旧记录未保存牌面）", "只有摘要", "未记录"} {
+	for _, want := range []string{"旧问题", "（旧记录未保存牌面）", "只有摘要", "未记录", "e 导出", "esc 返回"} {
 		if !strings.Contains(view, want) {
 			t.Errorf("history view missing %q", want)
 		}
+	}
+}
+
+func TestHistoryExportWritesMarkdown(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	m := newTestModelSize(80, 24)
+	m.historyReadings = []domain.Reading{{
+		ID:             "r_hist",
+		Question:       "事业接下来怎么走？",
+		SpreadID:       "three_card",
+		Interpretation: "旧解读",
+		FollowUps: []domain.FollowUpTurn{
+			{Role: "user", Content: "那下一步呢"},
+			{Role: "assistant", Content: "先写下来"},
+		},
+	}}
+	m.historyCursor = 0
+	m.state = &HistoryState{}
+	m.layoutHeights()
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'e'}})
+	mm := updated.(*Model)
+	if _, ok := mm.state.(*HistoryState); !ok {
+		t.Fatalf("state %T", mm.state)
+	}
+	if mm.err != nil {
+		t.Fatal(mm.err)
+	}
+	path := filepath.Join(home, ".tarot-agent", "exports", "r_hist.md")
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Fatalf("file mode %o", info.Mode().Perm())
+	}
+	dirInfo, err := os.Stat(filepath.Dir(path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dirInfo.Mode().Perm() != 0o700 {
+		t.Fatalf("dir mode %o", dirInfo.Mode().Perm())
+	}
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(body)
+	for _, want := range []string{"事业接下来怎么走？", "旧解读", "那下一步呢", "先写下来", "## 追问"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("export missing %q", want)
+		}
+	}
+	view := mm.View()
+	if !strings.Contains(view, "已导出") {
+		t.Fatalf("status missing path:\n%s", view)
+	}
+	for i, line := range strings.Split(view, "\n") {
+		if lipgloss.Width(line) > 80 {
+			t.Errorf("line %d width %d", i, lipgloss.Width(line))
+		}
+	}
+
+	updated, _ = mm.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'e'}})
+	mm = updated.(*Model)
+	if mm.err != nil {
+		t.Fatal(mm.err)
+	}
+	info, err = os.Stat(path)
+	if err != nil || info.Mode().Perm() != 0o600 {
+		t.Fatalf("second export mode %v %v", info, err)
 	}
 }

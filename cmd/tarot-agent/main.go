@@ -8,11 +8,13 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/MaybeJustLikeThis/tarot-agent/internal/agents"
 	"github.com/MaybeJustLikeThis/tarot-agent/internal/bootstrap"
 	"github.com/MaybeJustLikeThis/tarot-agent/internal/daily"
+	"github.com/MaybeJustLikeThis/tarot-agent/internal/export"
 	"github.com/MaybeJustLikeThis/tarot-agent/internal/host/tui"
 	"github.com/MaybeJustLikeThis/tarot-agent/internal/store"
 	"github.com/MaybeJustLikeThis/tarot-agent/internal/update"
@@ -52,6 +54,8 @@ type cliOptions struct {
 	yes         bool
 	daily       bool
 	update      bool
+	export      bool
+	exportArgs  []string
 }
 
 func run(args []string) error {
@@ -73,13 +77,16 @@ func run(args []string) error {
 	if opt.daily {
 		return runDaily(opt.mode)
 	}
+	if opt.export {
+		return runExport(opt.exportArgs)
+	}
 	return runTUI(opt.mode, ver)
 }
 
 // parseCLI accepts flags before or after daily and update.
 // Any other positional argument is left alone so a plain launch stays the same.
 func parseCLI(args []string) (cliOptions, error) {
-	flagArgs, dailyCmd, updateCmd := extractCommands(args)
+	flagArgs, dailyCmd, updateCmd, exportCmd, exportArgs := extractCommands(args)
 	fs := flag.NewFlagSet("tarot-agent", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	modeFlag := fs.String("mode", "", "reading mode: pro, professional, deep, casual, or simple")
@@ -102,11 +109,13 @@ func parseCLI(args []string) (cliOptions, error) {
 		yes:         *yesLong || *yesShort,
 		daily:       dailyCmd,
 		update:      updateCmd,
+		export:      exportCmd,
+		exportArgs:  exportArgs,
 	}, nil
 }
 
-func extractCommands(args []string) (flagArgs []string, dailyCmd, updateCmd bool) {
-	for _, arg := range args {
+func extractCommands(args []string) (flagArgs []string, dailyCmd, updateCmd, exportCmd bool, exportArgs []string) {
+	for i, arg := range args {
 		switch arg {
 		case "daily":
 			if !dailyCmd {
@@ -118,10 +127,109 @@ func extractCommands(args []string) (flagArgs []string, dailyCmd, updateCmd bool
 				updateCmd = true
 				continue
 			}
+		case "export":
+			if !exportCmd {
+				return flagArgs, dailyCmd, updateCmd, true, append([]string{}, args[i+1:]...)
+			}
 		}
 		flagArgs = append(flagArgs, arg)
 	}
-	return flagArgs, dailyCmd, updateCmd
+	return flagArgs, dailyCmd, updateCmd, exportCmd, exportArgs
+}
+
+func parseExportArgs(args []string) (export.Options, error) {
+	fs := flag.NewFlagSet("export", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	fs.Usage = func() {
+		fmt.Fprintf(os.Stderr, "用法: tarot-agent export [id|latest] [--format md|txt] [-o 文件] [--force]\n")
+		fmt.Fprintf(os.Stderr, "默认导出最近一条，格式 md，写到标准输出。-o 不覆盖已有文件，除非带 --force。\n")
+		fs.PrintDefaults()
+	}
+	format := fs.String("format", "md", "md or txt")
+	out := fs.String("o", "", "write to this file instead of stdout")
+	force := fs.Bool("force", false, "replace an existing -o file")
+	// The standard flag parser stops at the first id, so accept flags after it.
+	if perr := fs.Parse(exportFlagsFirst(args)); perr != nil {
+		if perr == flag.ErrHelp {
+			return export.Options{}, errFlagHelp
+		}
+		return export.Options{}, errFlagParse
+	}
+	if len(fs.Args()) > 1 {
+		return export.Options{}, fmt.Errorf("export 只接受一个记录 ID，或 latest")
+	}
+	query := "latest"
+	if len(fs.Args()) == 1 {
+		query = fs.Args()[0]
+	}
+	switch strings.ToLower(strings.TrimSpace(*format)) {
+	case "md", "markdown":
+	case "txt", "text", "plain":
+	default:
+		return export.Options{}, fmt.Errorf("不认识的导出格式 %q，可用 md 或 txt", *format)
+	}
+	return export.Options{
+		Query:      query,
+		Format:     *format,
+		OutputPath: *out,
+		Force:      *force,
+		Stdout:     os.Stdout,
+	}, nil
+}
+
+func runExport(args []string) error {
+	opt, err := parseExportArgs(args)
+	if err != nil {
+		return err
+	}
+	path, err := store.DefaultReadingsPath()
+	if err != nil {
+		return err
+	}
+	opt.Readings = store.NewReadingStore(path)
+	if err := export.Execute(opt); err != nil {
+		return fmt.Errorf("导出失败：%w", err)
+	}
+	return nil
+}
+
+// exportFlagsFirst lets `export <id> --format txt` parse. Bool flags and
+// flags with an attached value stay one token; the others take the next arg.
+func exportFlagsFirst(args []string) []string {
+	var flags, positionals []string
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if a == "--" {
+			positionals = append(positionals, args[i+1:]...)
+			break
+		}
+		if !strings.HasPrefix(a, "-") || a == "-" {
+			positionals = append(positionals, a)
+			continue
+		}
+		flags = append(flags, a)
+		if strings.Contains(a, "=") || isExportBool(a) || isAttachedShort(a) {
+			continue
+		}
+		if i+1 < len(args) {
+			i++
+			flags = append(flags, args[i])
+		}
+	}
+	return append(flags, positionals...)
+}
+
+func isExportBool(arg string) bool {
+	switch arg {
+	case "-h", "--help", "--force", "-force":
+		return true
+	default:
+		return false
+	}
+}
+
+func isAttachedShort(arg string) bool {
+	return strings.HasPrefix(arg, "-") && !strings.HasPrefix(arg, "--") && len(arg) > 2
 }
 
 func runTUI(modeFlag, ver string) error {
