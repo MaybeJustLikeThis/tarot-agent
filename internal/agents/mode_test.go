@@ -17,6 +17,8 @@ func TestNormalizeMode(t *testing.T) {
 		{" professional ", ModeProfessional, true},
 		{"casual", ModeCasual, true},
 		{"Casual", ModeCasual, true},
+		{"deep", ModeProfessional, true},
+		{" simple ", ModeCasual, true},
 		{"nope", ModeProfessional, false},
 		{"easy", ModeProfessional, false},
 	}
@@ -46,12 +48,26 @@ func TestResolveMode_FlagOverridesAndWarns(t *testing.T) {
 		t.Fatalf("empty: mode=%s warn=%q", mode, warn)
 	}
 	mode, warn = ResolveMode("nope", "")
-	if mode != ModeProfessional || !strings.Contains(warn, "nope") || !strings.Contains(warn, "专业模式") {
+	if mode != ModeProfessional || !strings.Contains(warn, "nope") || !strings.Contains(warn, "深入版") {
 		t.Fatalf("invalid configured: mode=%s warn=%q", mode, warn)
 	}
 	mode, warn = ResolveMode("casual", "later")
 	if mode != ModeProfessional || !strings.Contains(warn, "later") {
 		t.Fatalf("invalid flag: mode=%s warn=%q", mode, warn)
+	}
+	mode, warn = ResolveMode("professional", "simple")
+	if mode != ModeCasual || warn != "" {
+		t.Fatalf("flag simple: mode=%s warn=%q", mode, warn)
+	}
+	mode, warn = ResolveMode("casual", "deep")
+	if mode != ModeProfessional || warn != "" {
+		t.Fatalf("flag deep: mode=%s warn=%q", mode, warn)
+	}
+}
+
+func TestModeLabel(t *testing.T) {
+	if ModeProfessional.Label() != "深入版" || ModeCasual.Label() != "简洁版" {
+		t.Fatalf("labels %q %q", ModeProfessional.Label(), ModeCasual.Label())
 	}
 }
 
@@ -99,5 +115,17 @@ func TestPromptsUseThreePartStructure(t *testing.T) {
 		if !strings.Contains(text, "1–2") {
 			t.Errorf("%s prompt does not limit advice to 1-2 items", name)
 		}
+		if !strings.Contains(text, "牌阵信号") || !strings.Contains(text, "不要新开章节") || !strings.Contains(text, "不要硬凑") {
+			t.Errorf("%s prompt missing the cite-only signal rule", name)
+		}
+	}
+	if !strings.Contains(systemPromptPro, "元素和数字") {
+		t.Fatal("pro prompt should let the model expand elements and numbers")
+	}
+	if !strings.Contains(systemPromptCasual, "大白话") || !strings.Contains(systemPromptCasual, "一两句") {
+		t.Fatal("casual prompt should keep signal talk to a sentence or two of plain language")
+	}
+	if strings.Contains(systemPromptCasual, "如果有明显呼应") {
+		t.Fatal("casual prompt still invites invented card links")
 	}
 }

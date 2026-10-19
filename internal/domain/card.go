@@ -54,9 +54,10 @@ type Card struct {
 
 // AstrologyInfo holds astrological correspondences for a card.
 type AstrologyInfo struct {
-	Planet string `json:"planet,omitempty"`
-	Zodiac string `json:"zodiac,omitempty"`
-	Note   string `json:"note,omitempty"`
+	Planet       string `json:"planet,omitempty"`
+	Zodiac       string `json:"zodiac,omitempty"`
+	Note         string `json:"note,omitempty"`
+	SubInfluence string `json:"sub_influence,omitempty"`
 }
 
 // NumerologyInfo holds numerological significance of a card.

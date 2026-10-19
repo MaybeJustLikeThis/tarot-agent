@@ -33,13 +33,14 @@ const (
 )
 
 // NormalizeMode accepts the existing spellings and reports whether raw was valid.
-// Empty, "pro", and "professional" are professional. "casual" is casual.
+// Empty, "pro", "professional", and "deep" are professional.
+// "casual" and "simple" are casual.
 // Any other non-empty value is invalid and falls back to professional.
 func NormalizeMode(raw string) (AgentMode, bool) {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
-	case "", "pro", "professional":
+	case "", "pro", "professional", "deep":
 		return ModeProfessional, true
-	case "casual":
+	case "casual", "simple":
 		return ModeCasual, true
 	default:
 		return ModeProfessional, false
@@ -64,15 +65,15 @@ func ResolveMode(configured, flag string) (AgentMode, string) {
 	if ok {
 		return mode, ""
 	}
-	return mode, fmt.Sprintf("警告: 解读模式 %q 无效，已回退到专业模式（可用 professional、pro 或 casual）", strings.TrimSpace(raw))
+	return mode, fmt.Sprintf("警告: 解读模式 %q 无效，已回退到深入版（可用 professional、pro、deep、casual 或 simple）", strings.TrimSpace(raw))
 }
 
 // Label returns the Chinese display name for the mode.
 func (m AgentMode) Label() string {
 	if m == ModeCasual {
-		return "轻松模式"
+		return "简洁版"
 	}
-	return "专业模式"
+	return "深入版"
 }
 
 // BuildResult holds the agent and its associated guard for event tracking.

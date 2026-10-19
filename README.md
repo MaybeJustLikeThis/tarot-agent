@@ -12,6 +12,7 @@ AI 塔罗占卜 CLI 工具。通过牌面的象征语言，帮助你重新审视
 - 🔮 3 种牌阵：单张牌（快速指引）、三张牌（过去/现在/未来）、凯尔特十字（深度分析）
 - ✨ 逐张翻牌动画，还原真实占卜仪式感
 - 🤖 AI 深度解读 — 结合你的具体情境，不是模板复述
+- 🔎 解读时按 `ctrl+o` 查看本地牌库里的牌义、正逆位关键词和整体信号，不另调模型
 - 💬 解读后可继续追问，深入探讨
 - 📖 历史记录浏览 — 保存并回顾完整解读（问题、牌阵、牌面、模型、正文）
 - 🌅 每日一牌 — 一键获取今日指引
@@ -77,6 +78,9 @@ go run ./cmd/tarot-agent  # 或直接运行源码
 | 选择牌阵 | `esc` | 返回输入问题 |
 | 解读中 | `↑↓` / `jk`、`PgUp` / `PgDn` | 滚动解读 |
 | 解读中 | `ctrl+c` | 中止本次解读并退出 |
+| 解读中 / 追问 / 对话生成中 | `ctrl+o` | 打开当前牌阵各张牌的详情。牌名、关键词、元素、数字、占星、意象、宫廷牌角色和整体信号都来自本地牌库 |
+| 牌义 | `←` `→` / `h` `l` | 上一张 / 下一张 |
+| 牌义 | `esc` | 返回解读。滚动位置和正在生成的内容都还在 |
 | 追问 | `Enter` | 发送追问；输入为空则开始新的占卜 |
 | 追问 | `tab` | 在解读区和对话区之间切换滚动焦点 |
 | 追问 | 输入 `q` 后回车 | 退出 |
@@ -121,7 +125,7 @@ API Key 写在 `~/.tarot-agent/config.json`，文件权限是 `0600`，目录是
 |------|------|
 | `TAROT_API_KEY` | 只要设置了，就覆盖配置文件和 `DEEPSEEK_API_KEY` |
 | `DEEPSEEK_API_KEY` | 没有配置文件时可以单独用来启动。配置里如果已经保存了其他服务商的 key，它不会覆盖那把 key；当前服务商是 `deepseek` 时，会替换已保存的 DeepSeek key |
-| `--mode` | `pro`、`professional` 或 `casual`。非法值会警告并回退到专业模式，不会因此启动失败 |
+| `--mode` | `pro`、`professional`、`deep` 是深入版，`casual`、`simple` 是简洁版。配置文件里的旧值照常读取。非法值会警告并回退到深入版，不会因此启动失败 |
 
 ## 环境变量
 
@@ -132,7 +136,7 @@ API Key 写在 `~/.tarot-agent/config.json`，文件权限是 `0600`，目录是
 | `DEEPSEEK_API_KEY` | 见上一节。不能替换其他服务商已保存的 key | 无 |
 | `TAROT_BASE_URL` | API 地址 | 按 provider 自动选择 |
 | `TAROT_MODEL` | 模型名 | 按 provider 自动选择 |
-| `TAROT_MODE` | 解读模式：`professional`、`pro` 或 `casual`，与 `--mode` 互通 | `professional` |
+| `TAROT_MODE` | 解读模式，与 `--mode` 互通：`professional`、`pro`、`deep`、`casual`、`simple` | `professional` |
 | `TAROT_LOG_LEVEL` | `debug` / `info` / `warn` / `error` | `info` |
 | `TAROT_AGENT_TIMEOUT` | 单次解读的墙钟上限。可用 `5m`、`90s` 或纯秒数。未设置时单张牌和三张牌是 120 秒，凯尔特十字是 5 分钟。至少 1 秒，最多 30 分钟；非法值会在进入界面前报错 | 按牌阵 |
 
@@ -140,10 +144,12 @@ API Key 写在 `~/.tarot-agent/config.json`，文件权限是 `0600`，目录是
 
 ## 命令行
 
+深入版会多讲元素和数字；简洁版用大白话，更短。界面上显示这两个名字。配置文件仍保存 `professional` 或 `casual`，已经写过的 `pro` / `casual` 不用改。历史记录不保存模式，旧记录照常打开。
+
 ```bash
 ./tarot-agent --version       # 打印版本后退出，不读取配置
-./tarot-agent --mode=pro      # 专业模式，也可写 --mode=professional
-./tarot-agent --mode=casual   # 轻松模式
+./tarot-agent --mode=pro      # 深入版，也可写 professional 或 deep
+./tarot-agent --mode=casual   # 简洁版，也可写 simple
 ```
 
 ## License

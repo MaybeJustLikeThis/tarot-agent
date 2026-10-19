@@ -26,7 +26,7 @@ func main() {
 }
 
 func run() error {
-	modeFlag := flag.String("mode", "", "reading mode: 'pro' or 'casual'")
+	modeFlag := flag.String("mode", "", "reading mode: pro, professional, deep, casual, or simple")
 	versionFlag := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
 	if *versionFlag {
