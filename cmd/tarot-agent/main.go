@@ -59,20 +59,21 @@ func run(args []string) error {
 	if err != nil {
 		return err
 	}
+	ver := currentVersion()
 	if opt.showVersion {
-		fmt.Printf("tarot-agent %s\n", version)
+		fmt.Printf("tarot-agent %s\n", ver)
 		return nil
 	}
 	if opt.update {
-		return runUpdate(opt.checkOnly || opt.checkUpdate, opt.yes)
+		return runUpdate(opt.checkOnly || opt.checkUpdate, opt.yes, ver)
 	}
 	if opt.checkUpdate || opt.checkOnly {
-		return runCheckUpdate()
+		return runCheckUpdate(ver)
 	}
 	if opt.daily {
 		return runDaily(opt.mode)
 	}
-	return runTUI(opt.mode)
+	return runTUI(opt.mode, ver)
 }
 
 // parseCLI accepts flags before or after daily and update.
@@ -123,7 +124,7 @@ func extractCommands(args []string) (flagArgs []string, dailyCmd, updateCmd bool
 	return flagArgs, dailyCmd, updateCmd
 }
 
-func runTUI(modeFlag string) error {
+func runTUI(modeFlag, ver string) error {
 	var cfg *bootstrap.Config
 
 	// First-run setup
@@ -189,13 +190,13 @@ func runTUI(modeFlag string) error {
 	}()
 
 	// Launch TUI. Version and daily return earlier, so they do not check for updates.
-	return tui.Run(result.Agent, result.Guard, s, result.Mode.Label(), cfg.Model, version, update.StartupEnabled(version, os.Getenv))
+	return tui.Run(result.Agent, result.Guard, s, result.Mode.Label(), cfg.Model, ver, update.StartupEnabled(ver, os.Getenv))
 }
 
-func runCheckUpdate() error {
+func runCheckUpdate(ver string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), update.CheckTimeout)
 	defer cancel()
-	res, err := update.Check(ctx, nil, version)
+	res, err := update.Check(ctx, nil, ver)
 	if err != nil {
 		return fmt.Errorf("检查更新失败：%w", err)
 	}
@@ -204,7 +205,7 @@ func runCheckUpdate() error {
 }
 
 // runUpdate installs the latest release. TAROT_AGENT_NO_UPDATE does not apply.
-func runUpdate(checkOnly, yes bool) error {
+func runUpdate(checkOnly, yes bool, ver string) error {
 	budget := update.UpdateTimeout
 	if checkOnly {
 		budget = update.CheckTimeout
@@ -212,7 +213,7 @@ func runUpdate(checkOnly, yes bool) error {
 	ctx, cancel := context.WithTimeout(context.Background(), budget)
 	defer cancel()
 	err := update.Execute(ctx, update.ExecuteOptions{
-		Current:    version,
+		Current:    ver,
 		CheckOnly:  checkOnly,
 		Yes:        yes,
 		Stdin:      os.Stdin,
