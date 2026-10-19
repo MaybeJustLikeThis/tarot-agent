@@ -123,7 +123,7 @@ func TestFormatReport(t *testing.T) {
 		t.Fatalf("dev:\n%s", dev)
 	}
 	notice := ShortNotice("0.5.0", "v0.6.0")
-	if !strings.Contains(notice, "0.5.0 → v0.6.0") || strings.Count(notice, "\n") != 1 {
+	if !strings.Contains(notice, "0.5.0 → v0.6.0") || !strings.Contains(notice, "tarot-agent update") || strings.Count(notice, "\n") != 1 {
 		t.Fatalf("notice %q", notice)
 	}
 }

@@ -15,14 +15,24 @@ const (
 	LatestURL = "https://api.github.com/repos/MaybeJustLikeThis/tarot-agent/releases/latest"
 	// InstallPath is the module path passed to go install.
 	InstallPath = "github.com/MaybeJustLikeThis/tarot-agent/cmd/tarot-agent"
-	// CheckTimeout is the startup and --check-update budget.
+	// CheckTimeout is the startup and check-only budget.
 	CheckTimeout = 3 * time.Second
+	// UpdateTimeout bounds go install and release downloads.
+	UpdateTimeout = 2 * time.Minute
+	maxDownload   = 64 << 20
 )
+
+// Asset is one file attached to a GitHub release.
+type Asset struct {
+	Name string
+	URL  string
+}
 
 // Release is the latest published GitHub release.
 type Release struct {
-	Tag string
-	URL string
+	Tag    string
+	URL    string
+	Assets []Asset
 }
 
 // Result is a completed check. Skipped means the local version is not a release.
@@ -83,6 +93,10 @@ func FetchLatest(ctx context.Context, client *http.Client) (Release, error) {
 	var payload struct {
 		TagName string `json:"tag_name"`
 		HTMLURL string `json:"html_url"`
+		Assets  []struct {
+			Name string `json:"name"`
+			URL  string `json:"browser_download_url"`
+		} `json:"assets"`
 	}
 	if err := json.Unmarshal(body, &payload); err != nil {
 		return Release{}, fmt.Errorf("解析发布信息失败")
@@ -90,7 +104,15 @@ func FetchLatest(ctx context.Context, client *http.Client) (Release, error) {
 	if strings.TrimSpace(payload.TagName) == "" {
 		return Release{}, fmt.Errorf("响应里没有 tag_name")
 	}
-	return Release{Tag: strings.TrimSpace(payload.TagName), URL: strings.TrimSpace(payload.HTMLURL)}, nil
+	rel := Release{Tag: strings.TrimSpace(payload.TagName), URL: strings.TrimSpace(payload.HTMLURL)}
+	for _, a := range payload.Assets {
+		name := strings.TrimSpace(a.Name)
+		if name == "" {
+			continue
+		}
+		rel.Assets = append(rel.Assets, Asset{Name: name, URL: strings.TrimSpace(a.URL)})
+	}
+	return rel, nil
 }
 
 // FormatReport is the --check-update text. It does not include a trailing blank nag.
@@ -121,10 +143,11 @@ func FormatReport(r *Result) string {
 	return b.String()
 }
 
-// InstallGuide is the manual install text: go install, then the release page.
+// InstallGuide is the manual install text. The program does not replace itself here.
 func InstallGuide(url string) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "go install %s@latest\n", InstallPath)
+	b.WriteString("运行 tarot-agent update 更新。\n")
+	fmt.Fprintf(&b, "或：go install %s@latest\n", InstallPath)
 	if strings.TrimSpace(url) != "" {
 		fmt.Fprintf(&b, "或下载预编译包：%s\n", strings.TrimSpace(url))
 	} else {
@@ -134,10 +157,11 @@ func InstallGuide(url string) string {
 }
 
 // ShortNotice is the one-time TUI hint. It stays on two short lines.
+// The TUI never downloads or replaces the binary.
 func ShortNotice(current, latest string) string {
 	cur := strings.TrimSpace(current)
 	if cur == "" {
 		cur = "（空）"
 	}
-	return fmt.Sprintf("%s → %s 可更新\ngo install …@latest，或看 GitHub Releases", cur, strings.TrimSpace(latest))
+	return fmt.Sprintf("%s → %s 可更新\n运行 tarot-agent update 更新", cur, strings.TrimSpace(latest))
 }

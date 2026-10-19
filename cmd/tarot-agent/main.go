@@ -36,58 +36,91 @@ func main() {
 		if errors.Is(err, errFlagParse) {
 			os.Exit(2)
 		}
+		if errors.Is(err, update.ErrAvailable) {
+			os.Exit(3)
+		}
 		fmt.Fprintf(os.Stderr, "fatal: %v\n", err)
 		os.Exit(1)
 	}
 }
 
+type cliOptions struct {
+	mode        string
+	showVersion bool
+	checkUpdate bool
+	checkOnly   bool
+	yes         bool
+	daily       bool
+	update      bool
+}
+
 func run(args []string) error {
-	modeFlag, showVersion, checkUpdate, dailyCmd, err := parseCLI(args)
+	opt, err := parseCLI(args)
 	if err != nil {
 		return err
 	}
-	if showVersion {
+	if opt.showVersion {
 		fmt.Printf("tarot-agent %s\n", version)
 		return nil
 	}
-	if checkUpdate {
+	if opt.update {
+		return runUpdate(opt.checkOnly || opt.checkUpdate, opt.yes)
+	}
+	if opt.checkUpdate || opt.checkOnly {
 		return runCheckUpdate()
 	}
-	if dailyCmd {
-		return runDaily(modeFlag)
+	if opt.daily {
+		return runDaily(opt.mode)
 	}
-	return runTUI(modeFlag)
+	return runTUI(opt.mode)
 }
 
-// parseCLI accepts --mode, --version, and --check-update before or after daily.
+// parseCLI accepts flags before or after daily and update.
 // Any other positional argument is left alone so a plain launch stays the same.
-func parseCLI(args []string) (mode string, showVersion, checkUpdate, dailyCmd bool, err error) {
-	flagArgs, dailyCmd := extractDaily(args)
+func parseCLI(args []string) (cliOptions, error) {
+	flagArgs, dailyCmd, updateCmd := extractCommands(args)
 	fs := flag.NewFlagSet("tarot-agent", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	modeFlag := fs.String("mode", "", "reading mode: pro, professional, deep, casual, or simple")
 	versionFlag := fs.Bool("version", false, "print version and exit")
-	checkFlag := fs.Bool("check-update", false, "compare with the latest GitHub release and exit")
+	checkUpdate := fs.Bool("check-update", false, "compare with the latest GitHub release and exit")
+	checkOnly := fs.Bool("check", false, "with update, compare only and do not install")
+	yesLong := fs.Bool("yes", false, "update without asking")
+	yesShort := fs.Bool("y", false, "update without asking")
 	if perr := fs.Parse(flagArgs); perr != nil {
 		if perr == flag.ErrHelp {
-			return "", false, false, false, errFlagHelp
+			return cliOptions{}, errFlagHelp
 		}
-		return "", false, false, false, errFlagParse
+		return cliOptions{}, errFlagParse
 	}
-	return *modeFlag, *versionFlag, *checkFlag, dailyCmd, nil
+	return cliOptions{
+		mode:        *modeFlag,
+		showVersion: *versionFlag,
+		checkUpdate: *checkUpdate,
+		checkOnly:   *checkOnly,
+		yes:         *yesLong || *yesShort,
+		daily:       dailyCmd,
+		update:      updateCmd,
+	}, nil
 }
 
-func extractDaily(args []string) ([]string, bool) {
-	var flagArgs []string
-	dailyCmd := false
+func extractCommands(args []string) (flagArgs []string, dailyCmd, updateCmd bool) {
 	for _, arg := range args {
-		if arg == "daily" && !dailyCmd {
-			dailyCmd = true
-			continue
+		switch arg {
+		case "daily":
+			if !dailyCmd {
+				dailyCmd = true
+				continue
+			}
+		case "update":
+			if !updateCmd {
+				updateCmd = true
+				continue
+			}
 		}
 		flagArgs = append(flagArgs, arg)
 	}
-	return flagArgs, dailyCmd
+	return flagArgs, dailyCmd, updateCmd
 }
 
 func runTUI(modeFlag string) error {
@@ -168,6 +201,40 @@ func runCheckUpdate() error {
 	}
 	fmt.Print(update.FormatReport(res))
 	return nil
+}
+
+// runUpdate installs the latest release. TAROT_AGENT_NO_UPDATE does not apply.
+func runUpdate(checkOnly, yes bool) error {
+	budget := update.UpdateTimeout
+	if checkOnly {
+		budget = update.CheckTimeout
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), budget)
+	defer cancel()
+	err := update.Execute(ctx, update.ExecuteOptions{
+		Current:    version,
+		CheckOnly:  checkOnly,
+		Yes:        yes,
+		Stdin:      os.Stdin,
+		Stdout:     os.Stdout,
+		Stderr:     os.Stderr,
+		IsTerminal: isTerminal(os.Stdin),
+	})
+	if err == nil || errors.Is(err, update.ErrAvailable) {
+		return err
+	}
+	if checkOnly {
+		return fmt.Errorf("检查更新失败：%w", err)
+	}
+	return fmt.Errorf("更新失败：%w", err)
+}
+
+func isTerminal(f *os.File) bool {
+	st, err := f.Stat()
+	if err != nil {
+		return false
+	}
+	return st.Mode()&os.ModeCharDevice != 0
 }
 
 func runDaily(modeFlag string) error {

@@ -18,7 +18,7 @@ func TestUpdateNoticeFitsAndDismisses(t *testing.T) {
 		t.Fatal("notice was not stored")
 	}
 	view := m.View()
-	for _, want := range []string{"0.5.0 → v0.6.0", "GitHub Releases", "输入 q 回车退出"} {
+	for _, want := range []string{"0.5.0 → v0.6.0", "tarot-agent update", "输入 q 回车退出"} {
 		if !strings.Contains(view, want) {
 			t.Errorf("missing %q\n%s", want, view)
 		}
