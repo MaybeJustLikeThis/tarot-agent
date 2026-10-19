@@ -112,11 +112,13 @@ func inputHint(m *Model) string {
 	case *RevealState:
 		return "翻牌中，请稍候"
 	case *ReadingState:
-		return "↑↓/jk 滚动 · ctrl+c 退出"
+		return "↑↓/jk 滚动 · ctrl+o 牌义 · ctrl+c 退出"
 	case *FollowUpState:
-		return "回车发送追问 · tab 切换焦点 · 输入 q 回车退出"
+		return "回车发送追问 · tab 切换焦点 · ctrl+o 牌义 · 输入 q 回车退出"
 	case *ChatState:
-		return "tab 切换焦点 · ctrl+c 中止并退出"
+		return "tab 切换焦点 · ctrl+o 牌义 · ctrl+c 中止并退出"
+	case *CardDetailState:
+		return "←→/hl 换牌 · esc 返回解读"
 	default:
 		return "回车提交 · 空输入 tab 历史 · ctrl+d 每日一牌 · 输入 q 回车退出"
 	}
@@ -176,6 +178,8 @@ func stateDisplayName(s State) string {
 		return "等待输入"
 	case *QuestionGuideState:
 		return "确认问题"
+	case *CardDetailState:
+		return "牌义"
 	case *SpreadState:
 		return "选择牌阵"
 	case *RevealState:

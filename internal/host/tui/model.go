@@ -45,6 +45,7 @@ func (m *Model) layoutHeights() {
 		inputHSpread  = 6 // label(1) + 3 options + reason + hint(1)
 		inputHGuide   = 4 // label(1) + two choices + hint(1)
 		inputHHistory = 1 // single label line
+		inputHDetail  = 1 // one hint line; scroll is restored after leaving
 	)
 
 	var inputH int
@@ -55,6 +56,8 @@ func (m *Model) layoutHeights() {
 		inputH = inputHGuide
 	case *HistoryState:
 		inputH = inputHHistory
+	case *CardDetailState:
+		inputH = inputHDetail
 	default:
 		inputH = inputHDefault
 	}
@@ -142,7 +145,7 @@ type Model struct {
 	height    int
 
 	// Shared state accessible by all states
-	mode       string // "专业模式" or "轻松模式"
+	mode       string // display name: 深入版 or 简洁版
 	llmModel   string // provider model id, stored with each reading
 	userInput  string
 	spreadType string
@@ -245,10 +248,17 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	prevSpin := m.spinnerOn()
+	prevState := m.state
 	newState, cmd := m.state.Update(m, msg)
 	if newState != nil {
 		m.state = newState
 		m.layoutHeights()
+		if detail, ok := prevState.(*CardDetailState); ok {
+			if _, still := newState.(*CardDetailState); !still {
+				m.readingVP.SetYOffset(detail.readingY)
+				m.chatVP.SetYOffset(detail.chatY)
+			}
+		}
 	}
 	if !prevSpin && m.spinnerOn() && !m.spinnerActive {
 		m.spinnerActive = true
@@ -326,6 +336,8 @@ func (m *Model) View() string {
 		b.WriteString(renderQuestionGuideOptions())
 	case *HistoryState:
 		b.WriteString(statusBarStyle.Render("  " + inputLabel))
+	case *CardDetailState:
+		b.WriteString(statusBarStyle.Render("  " + inputHint(m)))
 	default:
 		b.WriteString(renderInputZone(m, inputLabel))
 	}
@@ -371,7 +383,11 @@ func joinHorizontal(left, right string) string {
 }
 
 func (m *Model) spinnerOn() bool {
-	switch m.state.(type) {
+	st := m.state
+	if detail, ok := st.(*CardDetailState); ok {
+		st = detail.prev
+	}
+	switch st.(type) {
 	case *RevealState, *ReadingState, *ChatState:
 		return true
 	}

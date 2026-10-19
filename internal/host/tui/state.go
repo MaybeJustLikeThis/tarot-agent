@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/MaybeJustLikeThis/tarot-agent/internal/domain"
 	"github.com/MaybeJustLikeThis/tarot-agent/internal/tools"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -87,9 +88,17 @@ func (s *InputState) View(m *Model) StateView {
 	left := renderPanelTitle("牌面", colorAccent) + "\n" +
 		renderCentered(m.layout.BodyHeight-1,
 			styleMuted.Italic(true).Render("等待抽牌..."))
+	note := "当前是" + modeOrDefault(m.mode) + "。深入版会多讲元素和数字，简洁版用大白话、更短。"
 	right := renderPanelTitle("解读", colorPrimary) + "\n" +
-		renderCentered(m.layout.BodyHeight-1, "")
+		wrapPlain(note, maxI(8, m.layout.RightWidth-2))
 	return StateView{Left: left, Right: right}
+}
+
+func modeOrDefault(mode string) string {
+	if mode == "" {
+		return "深入版"
+	}
+	return mode
 }
 
 // --- QuestionGuideState ---
@@ -254,10 +263,8 @@ func (s *RevealState) View(m *Model) StateView {
 
 func startInterpretation(m *Model) (State, tea.Cmd) {
 	cardInfo := formatDrawnCards(m.drawResult.Cards, m.spreadType)
-	prompt := fmt.Sprintf(
-		"【用户描述】\n%s\n\n【牌阵】\n%s\n\n【已抽到的牌】\n%s\n\n请先查询每张牌的含义，再按系统要求的三段输出：一句话结论、逐张说明、1–2 条可执行建议。",
-		m.userInput, m.spreadType, cardInfo,
-	)
+	signals := domain.SpreadSignals(m.drawResult.Cards)
+	prompt := readingPrompt(m.userInput, m.spreadType, cardInfo, signals)
 
 	m.bridge.setup(prompt, m.agentTimeout())
 	return &ReadingState{}, m.bridge.nextEvent()
@@ -314,6 +321,10 @@ func (s *ReadingState) Update(m *Model, msg tea.Msg) (State, tea.Cmd) {
 			m.readingVP.HalfViewUp()
 		case "pgdown":
 			m.readingVP.HalfViewDown()
+		case "ctrl+o":
+			if next, ok := openCardDetail(m, s); ok {
+				return next, nil
+			}
 		}
 	}
 
@@ -347,6 +358,11 @@ func (s *FollowUpState) Update(m *Model, msg tea.Msg) (State, tea.Cmd) {
 			return s, nil
 		case "pgdown":
 			m.focusedVP().HalfViewDown()
+			return s, nil
+		case "ctrl+o":
+			if next, ok := openCardDetail(m, s); ok {
+				return next, nil
+			}
 			return s, nil
 		case "enter":
 			input := strings.TrimSpace(m.input.Value())
@@ -441,6 +457,10 @@ func (s *ChatState) Update(m *Model, msg tea.Msg) (State, tea.Cmd) {
 			m.focusedVP().HalfViewUp()
 		case "pgdown":
 			m.focusedVP().HalfViewDown()
+		case "ctrl+o":
+			if next, ok := openCardDetail(m, s); ok {
+				return next, nil
+			}
 		}
 	}
 

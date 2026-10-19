@@ -171,8 +171,8 @@ func RunSetup() (*Config, error) {
 	// Step 5: Reading mode
 	fmt.Println()
 	fmt.Println("  选择解读模式：")
-	fmt.Println("    1. 专业模式 — 包含元素、占星、数字等深度分析")
-	fmt.Println("    2. 轻松模式 — 温暖对话式解读，不使用专业术语")
+	fmt.Println("    1. 深入版 — 会多讲元素和数字")
+	fmt.Println("    2. 简洁版 — 用大白话，更短")
 	fmt.Print("  请选择 [1/2]（默认 1）：> ")
 
 	modeInput, _ := reader.ReadString('\n')

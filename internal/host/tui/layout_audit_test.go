@@ -22,7 +22,7 @@ func TestLayoutAudit_LineWidthAndVisibility(t *testing.T) {
 	for _, sz := range layoutAuditSizes() {
 		w, h := sz[0], sz[1]
 		for _, spread := range []string{"single", "three_card", "celtic_cross"} {
-			for _, name := range []string{"input", "spread", "reveal", "reading", "followup", "chat", "history"} {
+			for _, name := range []string{"input", "spread", "reveal", "reading", "followup", "chat", "history", "detail"} {
 				m := auditModel(t, w, h, spread, name)
 				view := m.View()
 				label := fmt.Sprintf("%dx%d %s %s", w, h, spread, name)
@@ -122,6 +122,8 @@ func auditModel(t *testing.T, w, h int, spread, stateName string) *Model {
 		m.layoutHeights()
 		m.readingVP.SetContent(m.renderReadingMarkdown())
 		m.chatVP.SetContent(wrapPlain(m.chatTranscript(true), viewportWrapWidth(m.chatVP.Width)))
+	case "detail":
+		m.state = &CardDetailState{}
 	case "history":
 		m.drawResult = nil
 		m.historyReadings = []domain.Reading{
@@ -158,6 +160,8 @@ func bottomHintFor(stateName string) string {
 	case "chat":
 		return "ctrl+c 中止并退出"
 	case "history":
+		return "esc 返回"
+	case "detail":
 		return "esc 返回"
 	default:
 		return ""
