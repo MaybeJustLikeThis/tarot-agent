@@ -13,6 +13,7 @@ import (
 
 	"github.com/MaybeJustLikeThis/tarot-agent/internal/agents"
 	"github.com/MaybeJustLikeThis/tarot-agent/internal/bootstrap"
+	"github.com/MaybeJustLikeThis/tarot-agent/internal/cardlookup"
 	"github.com/MaybeJustLikeThis/tarot-agent/internal/daily"
 	"github.com/MaybeJustLikeThis/tarot-agent/internal/export"
 	"github.com/MaybeJustLikeThis/tarot-agent/internal/host/tui"
@@ -56,6 +57,8 @@ type cliOptions struct {
 	update      bool
 	export      bool
 	exportArgs  []string
+	card        bool
+	cardArgs    []string
 }
 
 func run(args []string) error {
@@ -80,13 +83,16 @@ func run(args []string) error {
 	if opt.export {
 		return runExport(opt.exportArgs)
 	}
+	if opt.card {
+		return runCard(opt.cardArgs)
+	}
 	return runTUI(opt.mode, ver)
 }
 
 // parseCLI accepts flags before or after daily and update.
 // Any other positional argument is left alone so a plain launch stays the same.
 func parseCLI(args []string) (cliOptions, error) {
-	flagArgs, dailyCmd, updateCmd, exportCmd, exportArgs := extractCommands(args)
+	flagArgs, dailyCmd, updateCmd, exportCmd, exportArgs, cardCmd, cardArgs := extractCommands(args)
 	fs := flag.NewFlagSet("tarot-agent", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	modeFlag := fs.String("mode", "", "reading mode: pro, professional, deep, casual, or simple")
@@ -111,11 +117,22 @@ func parseCLI(args []string) (cliOptions, error) {
 		update:      updateCmd,
 		export:      exportCmd,
 		exportArgs:  exportArgs,
+		card:        cardCmd,
+		cardArgs:    cardArgs,
 	}, nil
 }
 
-func extractCommands(args []string) (flagArgs []string, dailyCmd, updateCmd, exportCmd bool, exportArgs []string) {
-	for i, arg := range args {
+func extractCommands(args []string) (flagArgs []string, dailyCmd, updateCmd, exportCmd bool, exportArgs []string, cardCmd bool, cardArgs []string) {
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if isModeFlag(arg) {
+			flagArgs = append(flagArgs, arg)
+			if !strings.Contains(arg, "=") && i+1 < len(args) {
+				i++
+				flagArgs = append(flagArgs, args[i])
+			}
+			continue
+		}
 		switch arg {
 		case "daily":
 			if !dailyCmd {
@@ -129,12 +146,20 @@ func extractCommands(args []string) (flagArgs []string, dailyCmd, updateCmd, exp
 			}
 		case "export":
 			if !exportCmd {
-				return flagArgs, dailyCmd, updateCmd, true, append([]string{}, args[i+1:]...)
+				return flagArgs, dailyCmd, updateCmd, true, append([]string{}, args[i+1:]...), cardCmd, cardArgs
+			}
+		case "card":
+			if !cardCmd {
+				return flagArgs, dailyCmd, updateCmd, exportCmd, exportArgs, true, append([]string{}, args[i+1:]...)
 			}
 		}
 		flagArgs = append(flagArgs, arg)
 	}
-	return flagArgs, dailyCmd, updateCmd, exportCmd, exportArgs
+	return flagArgs, dailyCmd, updateCmd, exportCmd, exportArgs, cardCmd, cardArgs
+}
+
+func isModeFlag(arg string) bool {
+	return arg == "--mode" || arg == "-mode" || strings.HasPrefix(arg, "--mode=") || strings.HasPrefix(arg, "-mode=")
 }
 
 func parseExportArgs(args []string) (export.Options, error) {
@@ -189,6 +214,62 @@ func runExport(args []string) error {
 	opt.Readings = store.NewReadingStore(path)
 	if err := export.Execute(opt); err != nil {
 		return fmt.Errorf("导出失败：%w", err)
+	}
+	return nil
+}
+
+func parseCardArgs(args []string) (query string, list bool, err error) {
+	fs := flag.NewFlagSet("card", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	fs.Usage = func() {
+		fmt.Fprintf(os.Stderr, "用法: tarot-agent card <牌名> | tarot-agent card --list\n")
+		fmt.Fprintf(os.Stderr, "离线查询本地牌库。支持中文名、英文名、常见别名和大阿卡那编号。不调用模型。\n")
+		fs.PrintDefaults()
+	}
+	listFlag := fs.Bool("list", false, "list all 78 cards")
+	if perr := fs.Parse(cardFlagsFirst(args)); perr != nil {
+		if perr == flag.ErrHelp {
+			return "", false, errFlagHelp
+		}
+		return "", false, errFlagParse
+	}
+	if *listFlag && len(fs.Args()) > 0 {
+		return "", false, fmt.Errorf("card --list 不要再写牌名")
+	}
+	if !*listFlag && len(fs.Args()) == 0 {
+		return "", false, fmt.Errorf("请写出牌名，或用 --list 列出全部")
+	}
+	return strings.Join(fs.Args(), " "), *listFlag, nil
+}
+
+func cardFlagsFirst(args []string) []string {
+	var flags, positionals []string
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if a == "--" {
+			positionals = append(positionals, args[i+1:]...)
+			break
+		}
+		if strings.HasPrefix(a, "-") && a != "-" {
+			flags = append(flags, a)
+			continue
+		}
+		positionals = append(positionals, a)
+	}
+	return append(flags, positionals...)
+}
+
+func runCard(args []string) error {
+	query, list, err := parseCardArgs(args)
+	if err != nil {
+		return err
+	}
+	s, err := store.New()
+	if err != nil {
+		return fmt.Errorf("读取牌库: %w", err)
+	}
+	if err := cardlookup.Run(s.Cards.GetAll(), query, list, os.Stdout); err != nil {
+		return fmt.Errorf("查牌失败：%w", err)
 	}
 	return nil
 }

@@ -13,6 +13,7 @@ AI 塔罗占卜 CLI 工具。通过牌面的象征语言，帮助你重新审视
 - ✨ 逐张翻牌动画，还原真实占卜仪式感
 - 🤖 AI 深度解读 — 结合你的具体情境，不是模板复述
 - 🔎 解读时按 `ctrl+o` 查看本地牌库里的牌义、正逆位关键词和整体信号，不另调模型
+- 🔍 `tarot-agent card` 离线查一张牌的正逆位含义，不调用模型
 - 💬 解读后可继续追问，追问写进同一条记录
 - 📖 历史记录可以回顾完整解读，也可以从有牌面的记录接着追问
 - 🌅 每日一牌 — 界面里 `ctrl+d`，或命令行 `tarot-agent daily`
@@ -171,11 +172,18 @@ API Key 写在 `~/.tarot-agent/config.json`，文件权限是 `0600`，目录是
 ./tarot-agent export latest --format txt
 ./tarot-agent export r_123 -o reading.md
 ./tarot-agent export r_123 -o reading.md --force
+./tarot-agent card 愚者
+./tarot-agent card "Three of Wands"
+./tarot-agent card 钱币骑士
+./tarot-agent card 0
+./tarot-agent card --list
 ```
+
+`card` 不进入界面，也不读 API Key，不调用模型。牌名可以是中文（愚者、权杖三、星币骑士）、英文（大小写和空格不限，例如 `the fool`、`3 of wands`）、大阿卡那编号（`0` 到 `21`），以及常见别名：钱币、金币等于星币，剑等于宝剑，杯等于圣杯，皇后等于女皇。只写花色（例如 `权杖`）时列出这一组并退出码 1。完全没有接近的名字也会退出码 1。`--list` 列出全部 78 张。`--mode` 的值不会被当成子命令，所以 `--mode card` 仍是启动界面。
 
 `export` 不进入界面，也不读 API Key。`id` 省略或写成 `latest` 时导出最近一条。`--format` 是 `md`（默认）或 `txt`。不加 `-o` 就写到标准输出。`-o` 新建文件权限是 `0600`，上级目录不存在时按 `0700` 创建；文件已经在时不会悄悄覆盖，要加 `--force`。找不到这条记录时退出码 1，并说明是哪一个 id。历史里的 `e` 总是写 Markdown 到 `~/.tarot-agent/exports/<id>.md`，同一条再导出会更新这个文件。
 
-`daily` 不进入界面，`ctrl+d` 仍是界面里的每日一牌。没有 API Key，或者模型请求失败时，只打印本地牌义并说明原因，退出码仍是 0。结果写入历史，问题记为「今日指引」，不参与上面的相似问题匹配。不写子命令时，启动方式和以前一样。`--version` 和 `daily` 不会在启动时检查更新。`--version` 优先于 `update`，也优先于 `export`。
+`daily` 不进入界面，`ctrl+d` 仍是界面里的每日一牌。没有 API Key，或者模型请求失败时，只打印本地牌义并说明原因，退出码仍是 0。结果写入历史，问题记为「今日指引」，不参与上面的相似问题匹配。不写子命令时，启动方式和以前一样。`--version` 和 `daily` 不会在启动时检查更新。`--version` 优先于 `update`，也优先于 `export` 和 `card`。
 
 ## 更新
 
