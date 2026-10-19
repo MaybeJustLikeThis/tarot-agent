@@ -16,6 +16,7 @@ func SpreadSignals(cards []DrawnCard) []string {
 	out = append(out, elementSignals(cards)...)
 	out = append(out, majorSignal(cards)...)
 	out = append(out, numberSignals(cards)...)
+	out = append(out, courtSignals(cards)...)
 	out = append(out, suitSignals(cards)...)
 	out = append(out, reversedSignal(cards)...)
 	return out
@@ -90,6 +91,11 @@ func majorSignal(cards []DrawnCard) []string {
 func numberSignals(cards []DrawnCard) []string {
 	counts := map[int]int{}
 	for _, c := range cards {
+		// Court ranks are stored in Number, but they are not the pip/major
+		// numerology. Justice is 11; a Page is also 11 and must not count.
+		if isCourtCard(c.Card) {
+			continue
+		}
 		counts[c.Card.Number]++
 	}
 	var out []string
@@ -99,6 +105,23 @@ func numberSignals(cards []DrawnCard) []string {
 		}
 	}
 	return out
+}
+
+func courtSignals(cards []DrawnCard) []string {
+	n := 0
+	for _, c := range cards {
+		if isCourtCard(c.Card) {
+			n++
+		}
+	}
+	if n >= 2 {
+		return []string{fmt.Sprintf("宫廷牌 %d 张", n)}
+	}
+	return nil
+}
+
+func isCourtCard(c Card) bool {
+	return c.CourtRole != nil
 }
 
 func suitSignals(cards []DrawnCard) []string {
