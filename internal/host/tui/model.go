@@ -153,10 +153,14 @@ type Model struct {
 	height    int
 
 	// Shared state accessible by all states
-	mode       string // display name: 深入版 or 简洁版
-	llmModel   string // provider model id, stored with each reading
-	userInput  string
-	spreadType string
+	mode         string // display name: 深入版 or 简洁版
+	version      string // release version; dev builds do not check for updates
+	checkUpdates bool
+	// updateNotice is shown once on the input screen, then cleared by any key.
+	updateNotice string
+	llmModel     string // provider model id, stored with each reading
+	userInput    string
+	spreadType   string
 
 	// questionAdvice is set only while a rewrite is being offered.
 	questionAdvice *QuestionAdvice
@@ -235,7 +239,11 @@ func NewModel(agent *agentcore.Agent, guard *reminder.ReadingGuard, s *store.Sto
 
 func (m *Model) Init() tea.Cmd {
 	m.spinnerActive = true
-	return tea.Batch(textarea.Blink, m.spinner.Tick)
+	cmds := []tea.Cmd{textarea.Blink, m.spinner.Tick}
+	if m.checkUpdates {
+		cmds = append(cmds, checkUpdateCmd(m.version))
+	}
+	return tea.Batch(cmds...)
 }
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -257,6 +265,16 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.spinner, cmd = m.spinner.Update(msg)
 		m.spinnerActive = cmd != nil
 		return m, cmd
+
+	case updateAvailableMsg:
+		if _, ok := m.state.(*InputState); ok {
+			m.updateNotice = msg.text
+		}
+		return m, nil
+	}
+
+	if _, ok := msg.(tea.KeyMsg); ok {
+		m.updateNotice = ""
 	}
 
 	prevSpin := m.spinnerOn()

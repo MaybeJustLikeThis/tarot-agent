@@ -102,8 +102,11 @@ func (s *InputState) View(m *Model) StateView {
 		renderCentered(m.layout.BodyHeight-1,
 			styleMuted.Italic(true).Render("等待抽牌..."))
 	note := "当前是" + modeOrDefault(m.mode) + "。深入版会多讲元素和数字，简洁版用大白话、更短。"
-	right := renderPanelTitle("解读", colorPrimary) + "\n" +
-		wrapPlain(note, maxI(8, m.layout.RightWidth-2))
+	width := maxI(8, m.layout.RightWidth-2)
+	right := renderPanelTitle("解读", colorPrimary) + "\n" + wrapPlain(note, width)
+	if m.updateNotice != "" {
+		right += "\n\n" + styleMuted.Render(fitLines(m.updateNotice, width, 2))
+	}
 	return StateView{Left: left, Right: right}
 }
 
