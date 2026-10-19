@@ -189,10 +189,10 @@ export TAROT_NO_UPDATE=1
 - 没有终端而且没有 `-y` 时，只打印安装指引，不安装，退出码 3（表示有更新可用）。
 - 只检查用 `update --check` 或 `--check-update`。成功退出码 0；网络或接口错误退出码 1，并打印 `检查更新失败：…`。远端 tag 无法解析时退出码 0，并写明已跳过。
 
-安装时二选一，失败不会静默过去：
+安装顺序看你现在跑的是不是发布版，避免本机有 Go 时把新文件装进 GOBIN、正在用的那个却还是旧的：
 
-1. PATH 里有 `go` 时，执行 `go install github.com/MaybeJustLikeThis/tarot-agent/cmd/tarot-agent@<tag>`，然后打印 `which` 和 `tarot-agent --version`。`go install` 没有打进发布版本号时，`--version` 仍可能显示 `dev`，但代码已是该 tag。`go install` 失败（包括拉不到模块）时，改用下面的预编译包。
-2. 没有 `go`，或 `go install` 失败时，下载当前平台的 Release 包（linux / macOS / Windows，amd64 / arm64；Windows 是 zip，其他是 tar.gz），有 `checksums.txt` 就核对 sha256，再写入 `os.Executable()` 指向的文件。目录不可写时打印 `curl`、解压和移动命令，退出码 1。Windows 不能覆盖正在运行的 exe，会把新文件写到旁边的 `.new`，并提示退出后替换。
+1. 当前版本能解析成 major.minor.patch（Releases 里的预编译包）时，先下载当前平台的包（linux / macOS / Windows，amd64 / arm64；Windows 是 zip，其他是 tar.gz），有 `checksums.txt` 就核对 sha256，再替换 `os.Executable()` 指向的文件。替换失败才改跑 `go install …@<tag>`。这一步也失败，才打印 `curl`、解压和移动命令，退出码 1。Windows 不能覆盖正在运行的 exe，会把新文件写到旁边的 `.new`，并提示退出后替换。
+2. 当前是 `dev`、空版本或无法解析时，先执行 `go install github.com/MaybeJustLikeThis/tarot-agent/cmd/tarot-agent@<tag>`，然后打印 `which` 和 `tarot-agent --version`。`go install` 没有打进发布版本号时，`--version` 仍可能显示 `dev`，但代码已是该 tag。没有 `go`，或 `go install` 失败，再走上面的预编译包替换。
 
 也可以自己从 [Releases](https://github.com/MaybeJustLikeThis/tarot-agent/releases) 下载对应系统的包，对照 `checksums.txt` 后替换原来的二进制。或者：
 

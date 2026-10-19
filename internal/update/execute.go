@@ -148,27 +148,64 @@ func confirm(in io.Reader, out io.Writer, tag string) (bool, error) {
 	return ans == "y" || ans == "yes", nil
 }
 
+// errNoGo means the go tool is not on PATH. It is not a failed install.
+var errNoGo = errors.New("没有 go")
+
+// install picks a path from the build the user is actually running.
+// A release version replaces that executable. dev and other non-versions
+// were installed with go, so they update with go install first.
 func install(ctx context.Context, opt ExecuteOptions, rel Release) error {
-	if path, err := opt.LookGo(); err == nil && path != "" {
-		spec := InstallPath + "@" + rel.Tag
-		if err := opt.GoInstall(ctx, spec); err != nil {
-			fmt.Fprintf(opt.Stderr, "go install 失败，改用预编译包：%v\n", err)
-		} else {
-			which, ver := opt.ReportGo(ctx)
-			fmt.Fprintf(opt.Stdout, "已执行 go install %s\n", spec)
-			if which == "" {
-				fmt.Fprintln(opt.Stdout, "which: 没有在 PATH 里找到 tarot-agent")
-			} else {
-				fmt.Fprintf(opt.Stdout, "which: %s\n", which)
-			}
-			if ver != "" {
-				fmt.Fprintf(opt.Stdout, "tarot-agent --version: %s\n", ver)
-			}
-			fmt.Fprintf(opt.Stdout, "go install 没有打进发布版本号时，--version 仍可能显示 dev，但代码已是 %s。\n", rel.Tag)
+	if _, ok := ParseSemver(opt.Current); ok {
+		err := installAsset(ctx, opt, rel)
+		if err == nil {
 			return nil
 		}
+		fmt.Fprintf(opt.Stderr, "替换当前程序失败，改用 go install：%s\n", firstLine(err))
+		if gerr := tryGoInstall(ctx, opt, rel); gerr == nil {
+			return nil
+		} else if !errors.Is(gerr, errNoGo) {
+			return fmt.Errorf("%w\ngo install 也失败了：%v", err, gerr)
+		}
+		return err
+	}
+
+	if err := tryGoInstall(ctx, opt, rel); err == nil {
+		return nil
+	} else if !errors.Is(err, errNoGo) {
+		fmt.Fprintf(opt.Stderr, "go install 失败，改用预编译包：%v\n", err)
 	}
 	return installAsset(ctx, opt, rel)
+}
+
+func firstLine(err error) string {
+	s := err.Error()
+	if i := strings.IndexByte(s, '\n'); i >= 0 {
+		return s[:i]
+	}
+	return s
+}
+
+func tryGoInstall(ctx context.Context, opt ExecuteOptions, rel Release) error {
+	path, err := opt.LookGo()
+	if err != nil || path == "" {
+		return errNoGo
+	}
+	spec := InstallPath + "@" + rel.Tag
+	if err := opt.GoInstall(ctx, spec); err != nil {
+		return err
+	}
+	which, ver := opt.ReportGo(ctx)
+	fmt.Fprintf(opt.Stdout, "已执行 go install %s\n", spec)
+	if which == "" {
+		fmt.Fprintln(opt.Stdout, "which: 没有在 PATH 里找到 tarot-agent")
+	} else {
+		fmt.Fprintf(opt.Stdout, "which: %s\n", which)
+	}
+	if ver != "" {
+		fmt.Fprintf(opt.Stdout, "tarot-agent --version: %s\n", ver)
+	}
+	fmt.Fprintf(opt.Stdout, "go install 没有打进发布版本号时，--version 仍可能显示 dev，但代码已是 %s。\n", rel.Tag)
+	return nil
 }
 
 func installAsset(ctx context.Context, opt ExecuteOptions, rel Release) error {

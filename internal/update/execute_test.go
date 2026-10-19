@@ -76,7 +76,7 @@ func TestExecuteNonInteractiveReportsAvailable(t *testing.T) {
 func TestExecutePromptAndGoInstall(t *testing.T) {
 	var installed string
 	opt := ExecuteOptions{
-		Current:    "0.5.0",
+		Current:    "dev",
 		Yes:        false,
 		IsTerminal: true,
 		Stderr:     io.Discard,
@@ -164,7 +164,7 @@ func TestExecuteReleaseAssetAndPermission(t *testing.T) {
 	}
 }
 
-func TestExecuteGoInstallFallsBackToAsset(t *testing.T) {
+func TestInstallOrder(t *testing.T) {
 	archive := tarGz(t, map[string]string{"tarot-agent": "from-release"})
 	name, err := AssetName("linux", "amd64", "v0.6.0")
 	if err != nil {
@@ -172,21 +172,99 @@ func TestExecuteGoInstallFallsBackToAsset(t *testing.T) {
 	}
 	sum := sha256.Sum256(archive)
 	good := hex.EncodeToString(sum[:]) + "  " + name + "\n"
-	var stderr strings.Builder
-	var got []byte
-	opt := assetOptions(t, archive, good, name, "/tmp/tarot-agent", func(_, _ string, data []byte) (string, error) {
-		got = append([]byte(nil), data...)
-		return "", nil
+
+	t.Run("release replaces the running binary and skips go", func(t *testing.T) {
+		opt := assetOptions(t, archive, good, name, "/usr/local/bin/tarot-agent", func(string, string, []byte) (string, error) {
+			return "", nil
+		})
+		opt.Current = "v0.5.0"
+		opt.LookGo = func() (string, error) {
+			t.Fatal("release build should not look for go when replace works")
+			return "", nil
+		}
+		if err := Execute(context.Background(), opt); err != nil {
+			t.Fatal(err)
+		}
 	})
-	opt.Stderr = &stderr
-	opt.LookGo = func() (string, error) { return "/usr/bin/go", nil }
-	opt.GoInstall = func(context.Context, string) error { return errors.New("module lookup failed") }
-	if err := Execute(context.Background(), opt); err != nil {
-		t.Fatal(err)
+
+	t.Run("release falls back to go install after replace fails", func(t *testing.T) {
+		var order []string
+		var stderr strings.Builder
+		opt := assetOptions(t, archive, good, name, "/usr/local/bin/tarot-agent", func(string, string, []byte) (string, error) {
+			order = append(order, "place")
+			return "", os.ErrPermission
+		})
+		opt.Current = "0.5.0"
+		opt.Stderr = &stderr
+		opt.LookGo = func() (string, error) { return "/usr/bin/go", nil }
+		opt.GoInstall = func(context.Context, string) error {
+			order = append(order, "go")
+			return nil
+		}
+		opt.ReportGo = func(context.Context) (string, string) {
+			return "/home/user/go/bin/tarot-agent", "tarot-agent dev"
+		}
+		if err := Execute(context.Background(), opt); err != nil {
+			t.Fatal(err)
+		}
+		if strings.Join(order, ",") != "place,go" {
+			t.Fatalf("order %v", order)
+		}
+		if !strings.Contains(stderr.String(), "替换当前程序失败，改用 go install") {
+			t.Fatalf("stderr %s", stderr.String())
+		}
+	})
+
+	for _, current := range []string{"dev", "", "nightly"} {
+		t.Run("nonrelease "+current+" prefers go install", func(t *testing.T) {
+			var order []string
+			opt := assetOptions(t, archive, good, name, "/tmp/tarot-agent", func(string, string, []byte) (string, error) {
+				order = append(order, "place")
+				return "", nil
+			})
+			opt.Current = current
+			opt.LookGo = func() (string, error) { return "/usr/bin/go", nil }
+			opt.GoInstall = func(context.Context, string) error {
+				order = append(order, "go")
+				return nil
+			}
+			opt.ReportGo = func(context.Context) (string, string) { return "/home/user/go/bin/tarot-agent", "tarot-agent dev" }
+			if err := Execute(context.Background(), opt); err != nil {
+				t.Fatal(err)
+			}
+			if strings.Join(order, ",") != "go" {
+				t.Fatalf("current %q order %v", current, order)
+			}
+		})
 	}
-	if string(got) != "from-release" || !strings.Contains(stderr.String(), "改用预编译包") {
-		t.Fatalf("got %q stderr %s", got, stderr.String())
-	}
+
+	t.Run("dev falls back to the release asset", func(t *testing.T) {
+		var order []string
+		var stderr strings.Builder
+		opt := assetOptions(t, archive, good, name, "/tmp/tarot-agent", func(_, _ string, data []byte) (string, error) {
+			order = append(order, "place")
+			if string(data) != "from-release" {
+				t.Fatalf("placed %q", data)
+			}
+			return "", nil
+		})
+		opt.Current = "dev"
+		opt.Stderr = &stderr
+		opt.LookGo = func() (string, error) { return "/usr/bin/go", nil }
+		opt.GoInstall = func(context.Context, string) error {
+			order = append(order, "go")
+			return errors.New("module lookup failed")
+		}
+		if err := Execute(context.Background(), opt); err != nil {
+			t.Fatal(err)
+		}
+		if strings.Join(order, ",") != "go,place" {
+			t.Fatalf("order %v", order)
+		}
+		if !strings.Contains(stderr.String(), "改用预编译包") {
+			t.Fatalf("stderr %s", stderr.String())
+		}
+	})
 }
 
 func TestExecuteCheckOnlyDoesNotInstall(t *testing.T) {
