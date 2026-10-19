@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/MaybeJustLikeThis/tarot-agent/internal/domain"
+	"github.com/MaybeJustLikeThis/tarot-agent/internal/export"
 )
 
 // renderHistoryDetail formats a stored reading for the history viewport.
@@ -48,17 +49,43 @@ func renderHistoryDetail(r domain.Reading) string {
 }
 
 func historyStatusLabel(m *Model) string {
-	if r, ok := selectedReading(m); ok && len(r.Cards) == 0 {
-		return "旧记录无牌面，无法继续 · esc 返回"
+	if note := strings.TrimSpace(m.exportNote); note != "" {
+		return truncateWidth(note, historyBarWidth(m))
 	}
-	return "↑↓ 选择 · enter 继续 · esc 返回"
+	if r, ok := selectedReading(m); ok && len(r.Cards) == 0 {
+		return "旧记录无牌面，无法继续 · e 导出 · esc 返回"
+	}
+	return "↑↓ 选择 · enter 继续 · e 导出 · esc 返回"
 }
 
-func historyScrollHint(m *Model) string {
-	if r, ok := selectedReading(m); ok && len(r.Cards) == 0 {
-		return "  ↑↓/jk 滚动 · 旧记录无牌面，无法继续"
+func historyBarWidth(m *Model) int {
+	// The status line adds two spaces and one column of padding on each side.
+	w := m.layout.Width - 4
+	if w < 8 {
+		w = 8
 	}
-	return "  ↑↓/jk 滚动 · enter 继续 · esc 返回"
+	return w
+}
+
+func historyScrollHint() string {
+	return "  ↑↓/jk 滚动 · e 导出 · esc 返回"
+}
+
+func (m *Model) exportSelectedReading() {
+	r, ok := selectedReading(m)
+	if !ok {
+		m.exportNote = ""
+		m.err = fmt.Errorf("没有可导出的记录")
+		return
+	}
+	path, err := export.SaveMarkdown(r)
+	if err != nil {
+		m.exportNote = ""
+		m.err = fmt.Errorf("导出: %w", err)
+		return
+	}
+	m.err = nil
+	m.exportNote = "已导出 " + path
 }
 
 func selectedReading(m *Model) (domain.Reading, bool) {

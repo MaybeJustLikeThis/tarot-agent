@@ -204,6 +204,8 @@ type Model struct {
 	// followUpNeedsContext is set when a chat is resumed from history.
 	// The next follow-up prompt includes the saved reading; later turns do not.
 	followUpNeedsContext bool
+	// exportNote is the history status line after a successful export.
+	exportNote string
 
 	// Focus zone for scroll control ("reading" or "chat")
 	focusZone string
@@ -448,6 +450,7 @@ func (m *Model) resetReading() {
 	m.historyWritten = false
 	m.readingID = ""
 	m.followUpNeedsContext = false
+	m.exportNote = ""
 	m.retryNote = ""
 }
 
