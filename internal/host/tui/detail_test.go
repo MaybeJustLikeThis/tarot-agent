@@ -203,12 +203,12 @@ func TestCtrlOWithoutCardsStaysPut(t *testing.T) {
 }
 
 func TestReadingPromptIncludesSignalsOnlyWithEvidence(t *testing.T) {
-	one := readingPrompt("今日指引", "single", "愚者 正位", nil)
+	one := readingPrompt("今日指引", "single", "愚者 正位", nil, "", "")
 	if strings.Contains(one, "【牌阵信号】") {
 		t.Fatalf("single card prompt:\n%s", one)
 	}
 	signals := domain.SpreadSignals(sampleDetailCards())
-	got := readingPrompt("钱和未来", "three_card", "三张牌", signals)
+	got := readingPrompt("钱和未来", "three_card", "三张牌", signals, "", "")
 	for _, want := range []string{"【牌阵信号】", "火与水同时出现", "牌阵信号只引用上面的列表", "不要新开章节"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %q\n%s", want, got)

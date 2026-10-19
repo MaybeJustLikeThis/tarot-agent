@@ -128,4 +128,11 @@ func TestPromptsUseThreePartStructure(t *testing.T) {
 	if strings.Contains(systemPromptCasual, "如果有明显呼应") {
 		t.Fatal("casual prompt still invites invented card links")
 	}
+	for name, text := range map[string]string{"pro": systemPromptPro, "casual": systemPromptCasual} {
+		for _, want := range []string{"上次类似问题", "一句话对照", "不给诊断", "用药", "法律结论", "自伤"} {
+			if !strings.Contains(text, want) {
+				t.Errorf("%s prompt missing %q", name, want)
+			}
+		}
+	}
 }

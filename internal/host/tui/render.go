@@ -1,8 +1,10 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 
+	"github.com/MaybeJustLikeThis/tarot-agent/internal/domain"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -119,16 +121,23 @@ func inputHint(m *Model) string {
 		return "tab 切换焦点 · ctrl+o 牌义 · ctrl+c 中止并退出"
 	case *CardDetailState:
 		return "←→/hl 换牌 · esc 返回解读"
+	case *CrisisState:
+		return "esc 返回，先不抽牌"
 	default:
 		return "回车提交 · 空输入 tab 历史 · ctrl+d 每日一牌 · 输入 q 回车退出"
 	}
 }
 
 // renderQuestionGuideOptions is the accept / keep choice under the suggestion.
-func renderQuestionGuideOptions() string {
+func renderQuestionGuideOptions(m *Model) string {
 	var b strings.Builder
-	b.WriteString(spreadDescStyle.Render("  回车  采纳改写") + "\n")
-	b.WriteString(spreadDescStyle.Render("  n     保留原问题") + "\n")
+	if m.questionAdvice != nil {
+		b.WriteString(spreadDescStyle.Render("  回车  采纳改写") + "\n")
+		b.WriteString(spreadDescStyle.Render("  n     保留原问题") + "\n")
+		b.WriteString(statusBarStyle.Render("  esc 返回修改"))
+		return b.String()
+	}
+	b.WriteString(spreadDescStyle.Render("  回车  继续选牌阵") + "\n")
 	b.WriteString(statusBarStyle.Render("  esc 返回修改"))
 	return b.String()
 }
@@ -143,8 +152,44 @@ func renderSpreadOptions(m *Model) string {
 	if m.spreadAdvice.Reason != "" {
 		b.WriteString(styleMuted.Render("  "+m.spreadAdvice.Reason) + "\n")
 	}
+	if m.priorMatch != nil {
+		b.WriteString(styleMuted.Render(fitLines("  "+priorSpreadHint(m.priorMatch), m.layout.Width-2, 2)))
+		b.WriteString("\n")
+	}
+	if m.boundary.Kind == boundaryHealthLight {
+		b.WriteString(styleMuted.Render(fitLines("  "+m.boundary.Note, m.layout.Width-2, 1)))
+		b.WriteString("\n")
+	}
 	b.WriteString(statusBarStyle.Render("  esc 返回 · q 退出"))
 	return b.String()
+}
+
+func priorSpreadHint(match *domain.PriorMatch) string {
+	if match == nil {
+		return ""
+	}
+	date := "日期未记录"
+	if !match.Reading.CreatedAt.IsZero() {
+		date = match.Reading.CreatedAt.Format("2006-01-02")
+	}
+	return fmt.Sprintf("上次（%s）问过类似问题，抽到%s。", date, domain.BriefCards(match.Reading.Cards, 3))
+}
+
+// fitLines wraps text and keeps at most lines rows.
+func fitLines(s string, width, lines int) string {
+	if lines < 1 {
+		lines = 1
+	}
+	if width < 4 {
+		width = 4
+	}
+	parts := strings.Split(wrapPlain(s, width), "\n")
+	if len(parts) <= lines {
+		return strings.Join(parts, "\n")
+	}
+	kept := append([]string{}, parts[:lines-1]...)
+	kept = append(kept, truncateWidth(parts[lines-1], width))
+	return strings.Join(kept, "\n")
 }
 
 func spreadOptionLine(num, desc, id string, advice SpreadAdvice) string {
@@ -180,6 +225,8 @@ func stateDisplayName(s State) string {
 		return "确认问题"
 	case *CardDetailState:
 		return "牌义"
+	case *CrisisState:
+		return "关怀"
 	case *SpreadState:
 		return "选择牌阵"
 	case *RevealState:

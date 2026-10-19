@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/voocel/agentcore/llm"
 )
@@ -121,10 +122,19 @@ func LogFilePath() string {
 
 // NewModel creates an LLM model from the configuration.
 func NewModel(cfg *Config) (*llm.LiteLLMAdapter, error) {
-	model, err := llm.NewModel(cfg.Provider, cfg.Model,
+	return NewModelTimeout(cfg, 0)
+}
+
+// NewModelTimeout is NewModel with a per-request timeout. Zero keeps the client default.
+func NewModelTimeout(cfg *Config, timeout time.Duration) (*llm.LiteLLMAdapter, error) {
+	opts := []llm.ModelOption{
 		llm.WithAPIKey(cfg.APIKey),
 		llm.WithBaseURL(cfg.BaseURL),
-	)
+	}
+	if timeout > 0 {
+		opts = append(opts, llm.WithRequestTimeout(timeout))
+	}
+	model, err := llm.NewModel(cfg.Provider, cfg.Model, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("create model %s (%s): %w", cfg.Model, cfg.Provider, err)
 	}
