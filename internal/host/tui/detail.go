@@ -230,7 +230,7 @@ func courtDetail(role *domain.CourtRole) string {
 	return strings.Join(parts, "；")
 }
 
-func readingPrompt(question, spreadType, cardInfo string, signals []string) string {
+func readingPrompt(question, spreadType, cardInfo string, signals []string, prior, boundary string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "【用户描述】\n%s\n\n【牌阵】\n%s\n\n【已抽到的牌】\n%s\n\n", question, spreadType, cardInfo)
 	if len(signals) > 0 {
@@ -241,6 +241,15 @@ func readingPrompt(question, spreadType, cardInfo string, signals []string) stri
 			b.WriteString("\n")
 		}
 		b.WriteString("\n")
+	}
+	if strings.TrimSpace(prior) != "" {
+		b.WriteString(strings.TrimSpace(prior))
+		b.WriteString("\n\n")
+	}
+	if strings.TrimSpace(boundary) != "" {
+		b.WriteString("【边界】\n")
+		b.WriteString(strings.TrimSpace(boundary))
+		b.WriteString("\n\n")
 	}
 	b.WriteString("请先查询每张牌的含义，再按系统要求的三段输出：一句话结论、逐张说明、1–2 条可执行建议。")
 	if len(signals) > 0 {

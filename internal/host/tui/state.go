@@ -53,7 +53,10 @@ func (s *InputState) Update(m *Model, msg tea.Msg) (State, tea.Cmd) {
 				return &HistoryState{}, nil
 			}
 		case "ctrl+d":
-			m.userInput = "今日指引"
+			m.userInput = domain.DailyQuestion
+			m.questionAdvice = nil
+			m.boundary = Boundary{}
+			m.priorMatch = nil
 			m.resetReading()
 			m.resetChat()
 			m.err = nil
@@ -70,11 +73,21 @@ func (s *InputState) Update(m *Model, msg tea.Msg) (State, tea.Cmd) {
 			m.resetReading()
 			m.resetChat()
 			m.err = nil
-			if advice, ok := AdviseQuestion(input); ok {
+			m.priorMatch = nil
+			m.boundary = ClassifyQuestion(input)
+			if m.boundary.Kind == boundaryCrisis {
+				m.questionAdvice = nil
+				return &CrisisState{}, nil
+			}
+			advice, hasAdvice := AdviseQuestion(input)
+			if hasAdvice {
 				m.questionAdvice = &advice
+			} else {
+				m.questionAdvice = nil
+			}
+			if hasAdvice || m.boundary.Kind == boundaryHealth || m.boundary.Kind == boundaryLegal {
 				return &QuestionGuideState{}, nil
 			}
-			m.questionAdvice = nil
 			return enterSpread(m), nil
 		}
 	}
@@ -140,6 +153,9 @@ func (s *QuestionGuideState) View(m *Model) StateView {
 	}
 	var b strings.Builder
 	b.WriteString(renderPanelTitle("问题", colorPrimary) + "\n")
+	if m.boundary.Note != "" && m.boundary.Kind != boundaryHealthLight {
+		b.WriteString(wrapPlain(m.boundary.Note, width) + "\n\n")
+	}
 	if m.questionAdvice != nil {
 		b.WriteString(styleMuted.Render("原问题") + "\n")
 		b.WriteString(wrapPlain(m.questionAdvice.Original, width) + "\n\n")
@@ -150,9 +166,51 @@ func (s *QuestionGuideState) View(m *Model) StateView {
 	return StateView{Left: left, Right: b.String()}
 }
 
+// CrisisState stops a reading. esc returns to the editor; nothing here draws.
+type CrisisState struct{}
+
+func (s *CrisisState) Update(m *Model, msg tea.Msg) (State, tea.Cmd) {
+	key, ok := msg.(tea.KeyMsg)
+	if !ok {
+		return s, nil
+	}
+	switch key.String() {
+	case "ctrl+c":
+		return s, tea.Quit
+	case "esc":
+		return &InputState{}, nil
+	default:
+		return s, nil
+	}
+}
+
+func (s *CrisisState) View(m *Model) StateView {
+	left := renderPanelTitle("牌面", colorAccent) + "\n" +
+		renderCentered(m.layout.BodyHeight-1,
+			styleMuted.Italic(true).Render("先不抽牌"))
+	width := m.layout.RightWidth - 2
+	if width < 10 {
+		width = 10
+	}
+	right := renderPanelTitle("关怀", colorPrimary) + "\n" + wrapPlain(crisisNote, width)
+	return StateView{Left: left, Right: right}
+}
+
 func enterSpread(m *Model) *SpreadState {
 	m.spreadAdvice = RecommendSpread(m.userInput)
+	m.priorMatch = domain.FindSimilarQuestion(m.userInput, recentReadings(m))
 	return &SpreadState{}
+}
+
+func recentReadings(m *Model) []domain.Reading {
+	if m.store == nil || m.store.Readings == nil {
+		return nil
+	}
+	list, err := m.store.Readings.List(domain.SimilarLookback)
+	if err != nil {
+		return nil
+	}
+	return list
 }
 
 // --- SpreadState ---
@@ -264,7 +322,7 @@ func (s *RevealState) View(m *Model) StateView {
 func startInterpretation(m *Model) (State, tea.Cmd) {
 	cardInfo := formatDrawnCards(m.drawResult.Cards, m.spreadType)
 	signals := domain.SpreadSignals(m.drawResult.Cards)
-	prompt := readingPrompt(m.userInput, m.spreadType, cardInfo, signals)
+	prompt := readingPrompt(m.userInput, m.spreadType, cardInfo, signals, domain.FormatPriorBlock(m.priorMatch), m.boundary.PromptLine())
 
 	m.bridge.setup(prompt, m.agentTimeout())
 	return &ReadingState{}, m.bridge.nextEvent()

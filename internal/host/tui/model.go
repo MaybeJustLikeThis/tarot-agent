@@ -52,8 +52,16 @@ func (m *Model) layoutHeights() {
 	switch m.state.(type) {
 	case *SpreadState:
 		inputH = inputHSpread
+		if m.priorMatch != nil {
+			inputH += 2
+		}
+		if m.boundary.Kind == boundaryHealthLight {
+			inputH++
+		}
 	case *QuestionGuideState:
 		inputH = inputHGuide
+	case *CrisisState:
+		inputH = 2
 	case *HistoryState:
 		inputH = inputHHistory
 	case *CardDetailState:
@@ -152,6 +160,10 @@ type Model struct {
 
 	// questionAdvice is set only while a rewrite is being offered.
 	questionAdvice *QuestionAdvice
+	// boundary is the local health, legal, or crisis check for this question.
+	boundary Boundary
+	// priorMatch is the newest similar past reading, if one cleared the threshold.
+	priorMatch *domain.PriorMatch
 	// spreadAdvice highlights one spread after the question is confirmed.
 	spreadAdvice SpreadAdvice
 	drawResult   *domain.DrawResult
@@ -312,7 +324,13 @@ func (m *Model) View() string {
 	inputLabel := "说说你的情况和想问的问题："
 	switch m.state.(type) {
 	case *QuestionGuideState:
-		inputLabel = "可以改写这句，也可以保留原问题："
+		if m.questionAdvice != nil {
+			inputLabel = "可以改写这句，也可以保留原问题："
+		} else {
+			inputLabel = "可以继续，塔罗不代替医生或律师："
+		}
+	case *CrisisState:
+		inputLabel = "先不抽牌"
 	case *SpreadState:
 		inputLabel = "选择牌阵 (1/2/3)："
 	case *RevealState:
@@ -333,7 +351,10 @@ func (m *Model) View() string {
 		b.WriteString(renderSpreadOptions(m))
 	case *QuestionGuideState:
 		b.WriteString(inputLabel + "\n")
-		b.WriteString(renderQuestionGuideOptions())
+		b.WriteString(renderQuestionGuideOptions(m))
+	case *CrisisState:
+		b.WriteString(inputLabel + "\n")
+		b.WriteString(statusBarStyle.Render("  esc 返回"))
 	case *HistoryState:
 		b.WriteString(statusBarStyle.Render("  " + inputLabel))
 	case *CardDetailState:
