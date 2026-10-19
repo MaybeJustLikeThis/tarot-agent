@@ -122,14 +122,37 @@ func inputHint(m *Model) string {
 	}
 }
 
+// renderQuestionGuideOptions is the accept / keep choice under the suggestion.
+func renderQuestionGuideOptions() string {
+	var b strings.Builder
+	b.WriteString(spreadDescStyle.Render("  回车  采纳改写") + "\n")
+	b.WriteString(spreadDescStyle.Render("  n     保留原问题") + "\n")
+	b.WriteString(statusBarStyle.Render("  esc 返回修改"))
+	return b.String()
+}
+
 // renderSpreadOptions renders spread selection UI.
+// The recommended row is marked. Keys 1/2/3 are unchanged.
 func renderSpreadOptions(m *Model) string {
 	var b strings.Builder
-	b.WriteString(spreadNumberStyle.Render("  1") + "  " + spreadDescStyle.Render("单张牌 — 快速指引") + "\n")
-	b.WriteString(spreadNumberStyle.Render("  2") + "  " + spreadDescStyle.Render("三张牌 — 过去 / 现在 / 未来") + "\n")
-	b.WriteString(spreadNumberStyle.Render("  3") + "  " + spreadDescStyle.Render("凯尔特十字 — 深度全面分析") + "\n")
+	b.WriteString(spreadOptionLine("1", "单张牌 — 快速指引", "single", m.spreadAdvice))
+	b.WriteString(spreadOptionLine("2", "三张牌 — 过去 / 现在 / 未来", "three_card", m.spreadAdvice))
+	b.WriteString(spreadOptionLine("3", "凯尔特十字 — 深度全面分析", "celtic_cross", m.spreadAdvice))
+	if m.spreadAdvice.Reason != "" {
+		b.WriteString(styleMuted.Render("  "+m.spreadAdvice.Reason) + "\n")
+	}
 	b.WriteString(statusBarStyle.Render("  esc 返回 · q 退出"))
 	return b.String()
+}
+
+func spreadOptionLine(num, desc, id string, advice SpreadAdvice) string {
+	descStyle := spreadDescStyle
+	mark := ""
+	if advice.SpreadID == id {
+		descStyle = styleSuccess
+		mark = styleSuccess.Render("  ← 推荐")
+	}
+	return spreadNumberStyle.Render("  "+num) + "  " + descStyle.Render(desc) + mark + "\n"
 }
 
 // --- helpers ---
@@ -151,6 +174,8 @@ func stateDisplayName(s State) string {
 	switch s.(type) {
 	case *InputState:
 		return "等待输入"
+	case *QuestionGuideState:
+		return "确认问题"
 	case *SpreadState:
 		return "选择牌阵"
 	case *RevealState:

@@ -69,7 +69,12 @@ func (s *InputState) Update(m *Model, msg tea.Msg) (State, tea.Cmd) {
 			m.resetReading()
 			m.resetChat()
 			m.err = nil
-			return &SpreadState{}, nil
+			if advice, ok := AdviseQuestion(input); ok {
+				m.questionAdvice = &advice
+				return &QuestionGuideState{}, nil
+			}
+			m.questionAdvice = nil
+			return enterSpread(m), nil
 		}
 	}
 
@@ -85,6 +90,60 @@ func (s *InputState) View(m *Model) StateView {
 	right := renderPanelTitle("解读", colorPrimary) + "\n" +
 		renderCentered(m.layout.BodyHeight-1, "")
 	return StateView{Left: left, Right: right}
+}
+
+// --- QuestionGuideState ---
+
+// QuestionGuideState offers an optional rewrite. Enter accepts it, n keeps
+// the original, esc returns to the editor. Nothing here starts a reading.
+type QuestionGuideState struct{}
+
+func (s *QuestionGuideState) Update(m *Model, msg tea.Msg) (State, tea.Cmd) {
+	key, ok := msg.(tea.KeyMsg)
+	if !ok {
+		return s, nil
+	}
+	switch key.String() {
+	case "ctrl+c":
+		return s, tea.Quit
+	case "enter":
+		if m.questionAdvice != nil {
+			m.userInput = m.questionAdvice.Suggested
+			m.input.SetValue(m.questionAdvice.Suggested)
+		}
+		return enterSpread(m), nil
+	case "n", "N":
+		return enterSpread(m), nil
+	case "esc":
+		return &InputState{}, nil
+	default:
+		return s, nil
+	}
+}
+
+func (s *QuestionGuideState) View(m *Model) StateView {
+	left := renderPanelTitle("牌面", colorAccent) + "\n" +
+		renderCentered(m.layout.BodyHeight-1,
+			styleMuted.Italic(true).Render("等待抽牌..."))
+	width := m.layout.RightWidth - 2
+	if width < 10 {
+		width = 10
+	}
+	var b strings.Builder
+	b.WriteString(renderPanelTitle("问题", colorPrimary) + "\n")
+	if m.questionAdvice != nil {
+		b.WriteString(styleMuted.Render("原问题") + "\n")
+		b.WriteString(wrapPlain(m.questionAdvice.Original, width) + "\n\n")
+		b.WriteString(styleSuccess.Render("可以改成") + "\n")
+		b.WriteString(wrapPlain(m.questionAdvice.Suggested, width) + "\n\n")
+		b.WriteString(styleMuted.Render(wrapPlain(m.questionAdvice.Reason, width)))
+	}
+	return StateView{Left: left, Right: b.String()}
+}
+
+func enterSpread(m *Model) *SpreadState {
+	m.spreadAdvice = RecommendSpread(m.userInput)
+	return &SpreadState{}
 }
 
 // --- SpreadState ---
@@ -196,7 +255,7 @@ func (s *RevealState) View(m *Model) StateView {
 func startInterpretation(m *Model) (State, tea.Cmd) {
 	cardInfo := formatDrawnCards(m.drawResult.Cards, m.spreadType)
 	prompt := fmt.Sprintf(
-		"【用户描述】\n%s\n\n【牌阵】\n%s\n\n【已抽到的牌】\n%s\n\n请查询每张牌的含义，然后给出深度个性化解读。",
+		"【用户描述】\n%s\n\n【牌阵】\n%s\n\n【已抽到的牌】\n%s\n\n请先查询每张牌的含义，再按系统要求的三段输出：一句话结论、逐张说明、1–2 条可执行建议。",
 		m.userInput, m.spreadType, cardInfo,
 	)
 

@@ -42,7 +42,8 @@ func (m *Model) layoutHeights() {
 		topH          = 1 // status bar always 1 line
 		sepH          = 1 // separator between body and input
 		inputHDefault = 8 // label(1) + textarea(max 6) + hint(1)
-		inputHSpread  = 5 // label(1) + 3 options + hint(1)
+		inputHSpread  = 6 // label(1) + 3 options + reason + hint(1)
+		inputHGuide   = 4 // label(1) + two choices + hint(1)
 		inputHHistory = 1 // single label line
 	)
 
@@ -50,6 +51,8 @@ func (m *Model) layoutHeights() {
 	switch m.state.(type) {
 	case *SpreadState:
 		inputH = inputHSpread
+	case *QuestionGuideState:
+		inputH = inputHGuide
 	case *HistoryState:
 		inputH = inputHHistory
 	default:
@@ -139,12 +142,17 @@ type Model struct {
 	height    int
 
 	// Shared state accessible by all states
-	mode        string // "专业模式" or "轻松模式"
-	llmModel    string // provider model id, stored with each reading
-	userInput   string
-	spreadType  string
-	drawResult  *domain.DrawResult
-	revealIndex int
+	mode       string // "专业模式" or "轻松模式"
+	llmModel   string // provider model id, stored with each reading
+	userInput  string
+	spreadType string
+
+	// questionAdvice is set only while a rewrite is being offered.
+	questionAdvice *QuestionAdvice
+	// spreadAdvice highlights one spread after the question is confirmed.
+	spreadAdvice SpreadAdvice
+	drawResult   *domain.DrawResult
+	revealIndex  int
 
 	// Reading (decoupled from conversation)
 	readingContent string          // the AI's interpretation text
@@ -293,6 +301,8 @@ func (m *Model) View() string {
 	// 4. Input zone
 	inputLabel := "说说你的情况和想问的问题："
 	switch m.state.(type) {
+	case *QuestionGuideState:
+		inputLabel = "可以改写这句，也可以保留原问题："
 	case *SpreadState:
 		inputLabel = "选择牌阵 (1/2/3)："
 	case *RevealState:
@@ -307,12 +317,16 @@ func (m *Model) View() string {
 		inputLabel = "浏览历史记录（↑↓ 选择 · esc 返回）"
 	}
 
-	if _, isSpread := m.state.(*SpreadState); isSpread {
+	switch m.state.(type) {
+	case *SpreadState:
 		b.WriteString(inputLabel + "\n")
 		b.WriteString(renderSpreadOptions(m))
-	} else if _, isHistory := m.state.(*HistoryState); isHistory {
+	case *QuestionGuideState:
+		b.WriteString(inputLabel + "\n")
+		b.WriteString(renderQuestionGuideOptions())
+	case *HistoryState:
 		b.WriteString(statusBarStyle.Render("  " + inputLabel))
-	} else {
+	default:
 		b.WriteString(renderInputZone(m, inputLabel))
 	}
 
