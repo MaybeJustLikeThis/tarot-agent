@@ -144,6 +144,20 @@ func (g *ReadingGuard) SetExpectedCards(n int32) {
 	g.expected = int(n)
 }
 
+// AllowFollowUp marks the new-reading checklist done.
+// A chat resumed from history should not be sent back to look up every card
+// and call save_reading before it can answer.
+func (g *ReadingGuard) AllowFollowUp() {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.seen = make(map[string]struct{})
+	g.expected = 0
+	g.meaningBlocks = 0
+	g.saveBlocks = 0
+	g.meaningsWaived = false
+	g.readingSaved = true
+}
+
 // Reset resets all state for a new reading session.
 func (g *ReadingGuard) Reset() {
 	g.mu.Lock()

@@ -2,6 +2,7 @@ package store
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -101,4 +102,90 @@ func (rs *ReadingStore) List(limit int) ([]domain.Reading, error) {
 
 	// Return the last N entries (most recent).
 	return all[len(all)-limit:], nil
+}
+
+// UpdateFollowUps replaces the follow-up turns of the reading with id.
+// Other fields on that line are kept. Lines that do not parse are copied
+// through unchanged. The file mode stays 0600.
+func (rs *ReadingStore) UpdateFollowUps(id string, turns []domain.FollowUpTurn) error {
+	if id == "" {
+		return fmt.Errorf("update reading: empty id")
+	}
+
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+
+	data, err := os.ReadFile(rs.path)
+	if err != nil {
+		return fmt.Errorf("open readings file %s: %w", rs.path, err)
+	}
+
+	lines := bytes.Split(data, []byte("\n"))
+	// Split keeps a trailing empty piece when the file ends with a newline.
+	if len(lines) > 0 && len(lines[len(lines)-1]) == 0 {
+		lines = lines[:len(lines)-1]
+	}
+
+	var buf bytes.Buffer
+	found := false
+	for _, line := range lines {
+		replaced := false
+		if len(bytes.TrimSpace(line)) > 0 {
+			var reading domain.Reading
+			if json.Unmarshal(line, &reading) == nil && reading.ID == id {
+				reading.FollowUps = cloneFollowUps(turns)
+				encoded, err := json.Marshal(&reading)
+				if err != nil {
+					return fmt.Errorf("marshal reading: %w", err)
+				}
+				buf.Write(encoded)
+				replaced = true
+				found = true
+			}
+		}
+		if !replaced {
+			buf.Write(line)
+		}
+		buf.WriteByte('\n')
+	}
+	if !found {
+		return fmt.Errorf("update reading %s: not found", id)
+	}
+
+	dir := filepath.Dir(rs.path)
+	tmp, err := os.CreateTemp(dir, ".readings-*.tmp")
+	if err != nil {
+		return fmt.Errorf("create readings temp file: %w", err)
+	}
+	tmpName := tmp.Name()
+	cleanup := true
+	defer func() {
+		if cleanup {
+			_ = tmp.Close()
+			_ = os.Remove(tmpName)
+		}
+	}()
+	if err := tmp.Chmod(0o600); err != nil {
+		return fmt.Errorf("chmod readings temp file: %w", err)
+	}
+	if _, err := tmp.Write(buf.Bytes()); err != nil {
+		return fmt.Errorf("write readings temp file: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("close readings temp file: %w", err)
+	}
+	if err := os.Rename(tmpName, rs.path); err != nil {
+		return fmt.Errorf("replace readings file %s: %w", rs.path, err)
+	}
+	cleanup = false
+	return nil
+}
+
+func cloneFollowUps(turns []domain.FollowUpTurn) []domain.FollowUpTurn {
+	if len(turns) == 0 {
+		return nil
+	}
+	out := make([]domain.FollowUpTurn, len(turns))
+	copy(out, turns)
+	return out
 }

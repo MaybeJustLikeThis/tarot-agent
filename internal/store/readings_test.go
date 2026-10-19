@@ -221,6 +221,90 @@ func TestReadingStore_LegacyLineWithoutCards(t *testing.T) {
 	if r.CreatedAt.IsZero() {
 		t.Fatal("expected created_at to parse")
 	}
+	if len(r.FollowUps) != 0 {
+		t.Fatalf("legacy line should have no followups, got %#v", r.FollowUps)
+	}
+}
+
+func TestReadingStore_UpdateFollowUps(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "readings.jsonl")
+	raw := strings.Join([]string{
+		`not json`,
+		`{"id":"r_keep","question":"别动","spread_id":"single","interpretation":"保持原文","created_at":"2026-01-02T15:04:05Z"}`,
+		`{"id":"r_edit","question":"要更新","spread_id":"three_card","interpretation":"原解读","model":"deepseek-chat","created_at":"2026-03-04T00:00:00Z"}`,
+		``,
+	}, "\n")
+	if err := os.WriteFile(path, []byte(raw), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	rs := store.NewReadingStore(path)
+	when := time.Date(2026, 10, 19, 8, 0, 0, 0, time.UTC)
+	turns := []domain.FollowUpTurn{
+		{Role: "user", Content: "那下一步呢", CreatedAt: when},
+		{Role: "assistant", Content: "先写下来"},
+	}
+	if err := rs.UpdateFollowUps("r_edit", turns); err != nil {
+		t.Fatal(err)
+	}
+
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Fatalf("file mode = %o", info.Mode().Perm())
+	}
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimSuffix(string(body), "\n"), "\n")
+	if len(lines) != 3 {
+		t.Fatalf("lines = %d\n%s", len(lines), body)
+	}
+	if lines[0] != "not json" {
+		t.Fatalf("malformed line changed: %q", lines[0])
+	}
+	if !strings.Contains(lines[1], `"interpretation":"保持原文"`) || strings.Contains(lines[1], "followups") {
+		t.Fatalf("untouched line changed: %s", lines[1])
+	}
+
+	got, err := rs.List(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("readable readings = %d", len(got))
+	}
+	edited := got[1]
+	if edited.ID != "r_edit" || edited.Interpretation != "原解读" || edited.Model != "deepseek-chat" || edited.Question != "要更新" {
+		t.Fatalf("edited reading: %+v", edited)
+	}
+	if len(edited.FollowUps) != 2 || edited.FollowUps[0].Role != "user" || edited.FollowUps[0].Content != "那下一步呢" {
+		t.Fatalf("followups: %+v", edited.FollowUps)
+	}
+	if !edited.FollowUps[0].CreatedAt.Equal(when) {
+		t.Fatalf("created_at = %s", edited.FollowUps[0].CreatedAt)
+	}
+	if edited.FollowUps[1].Role != "assistant" || !edited.FollowUps[1].CreatedAt.IsZero() {
+		t.Fatalf("assistant turn: %+v", edited.FollowUps[1])
+	}
+
+	again := append(turns, domain.FollowUpTurn{Role: "user", Content: "还有呢"}, domain.FollowUpTurn{Role: "assistant", Content: "再小一点"})
+	if err := rs.UpdateFollowUps("r_edit", again); err != nil {
+		t.Fatal(err)
+	}
+	got, err = rs.List(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || got[1].ID != "r_edit" || len(got[1].FollowUps) != 4 || got[1].Interpretation != "原解读" {
+		t.Fatalf("second update: %+v", got)
+	}
+	if err := rs.UpdateFollowUps("missing", turns); err == nil {
+		t.Fatal("expected missing id to fail")
+	}
 }
 
 func TestReadingStore_LongLine(t *testing.T) {

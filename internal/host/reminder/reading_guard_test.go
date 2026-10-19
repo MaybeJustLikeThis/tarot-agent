@@ -27,6 +27,19 @@ func saveOK() agentcore.Event {
 	}
 }
 
+func TestReadingGuard_AllowFollowUp(t *testing.T) {
+	g, guard := NewReadingGuard()
+	g.SetExpectedCards(2)
+	g.AllowFollowUp()
+	decision := guard(nil, agentcore.StopInfo{})
+	if !decision.Allow {
+		t.Fatal("resumed follow-up should be allowed to finish")
+	}
+	if decision.InjectMessage != "" {
+		t.Fatalf("inject = %q", decision.InjectMessage)
+	}
+}
+
 func TestReadingGuard_AllConditionsMet(t *testing.T) {
 	g, guard := NewReadingGuard()
 	g.SetExpectedCards(2)

@@ -34,7 +34,38 @@ func renderHistoryDetail(r domain.Reading) string {
 		b.WriteString(text)
 		b.WriteString("\n")
 	}
+	if len(r.FollowUps) > 0 {
+		b.WriteString("\n**追问**\n\n")
+		for _, turn := range r.FollowUps {
+			who := "助手"
+			if turn.Role == "user" {
+				who = "你"
+			}
+			fmt.Fprintf(&b, "**%s**：%s\n\n", who, strings.TrimSpace(turn.Content))
+		}
+	}
 	return b.String()
+}
+
+func historyStatusLabel(m *Model) string {
+	if r, ok := selectedReading(m); ok && len(r.Cards) == 0 {
+		return "旧记录无牌面，无法继续 · esc 返回"
+	}
+	return "↑↓ 选择 · enter 继续 · esc 返回"
+}
+
+func historyScrollHint(m *Model) string {
+	if r, ok := selectedReading(m); ok && len(r.Cards) == 0 {
+		return "  ↑↓/jk 滚动 · 旧记录无牌面，无法继续"
+	}
+	return "  ↑↓/jk 滚动 · enter 继续 · esc 返回"
+}
+
+func selectedReading(m *Model) (domain.Reading, bool) {
+	if m.historyCursor < 0 || m.historyCursor >= len(m.historyReadings) {
+		return domain.Reading{}, false
+	}
+	return m.historyReadings[m.historyCursor], true
 }
 
 func spreadLabel(spreadID string) string {
@@ -125,7 +156,7 @@ func (m *Model) finishReading(agentErr error) {
 }
 
 // persistCurrentReading writes the reading the user just saw, once per draw.
-// Follow-up turns do not call this.
+// Follow-up turns update that same record via persistFollowUps.
 func (m *Model) persistCurrentReading() {
 	if m.historyWritten || m.store == nil || m.store.Readings == nil {
 		return
@@ -158,4 +189,172 @@ func (m *Model) persistCurrentReading() {
 		return
 	}
 	m.historyWritten = true
+	m.readingID = reading.ID
+}
+
+// persistFollowUps writes the current chat onto the reading saved for this draw.
+// A missing id does not create a second record. A write error stays on m.err
+// and leaves the conversation in place.
+func (m *Model) persistFollowUps() {
+	if m.readingID == "" || m.store == nil || m.store.Readings == nil {
+		return
+	}
+	if !chatHasAssistant(m.chatMessages) {
+		return
+	}
+	turns := followUpsFromChat(m.chatMessages)
+	if err := m.store.Readings.UpdateFollowUps(m.readingID, turns); err != nil {
+		m.err = fmt.Errorf("保存追问: %w", err)
+	}
+}
+
+func chatHasAssistant(messages []ChatMessage) bool {
+	for _, msg := range messages {
+		if msg.Role == "assistant" && strings.TrimSpace(msg.Content) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func followUpsFromChat(messages []ChatMessage) []domain.FollowUpTurn {
+	turns := make([]domain.FollowUpTurn, 0, len(messages))
+	for _, msg := range messages {
+		if msg.Role != "user" && msg.Role != "assistant" {
+			continue
+		}
+		if strings.TrimSpace(msg.Content) == "" {
+			continue
+		}
+		turns = append(turns, domain.FollowUpTurn{
+			Role:      msg.Role,
+			Content:   msg.Content,
+			CreatedAt: msg.CreatedAt,
+		})
+	}
+	return turns
+}
+
+// resumeReading opens a stored reading as a follow-up chat.
+// Later turns update this id. The agent is cleared so the next question
+// carries the saved interpretation.
+func (m *Model) resumeReading(r domain.Reading) {
+	m.userInput = r.Question
+	m.spreadType = r.SpreadID
+	m.drawResult = &domain.DrawResult{
+		SpreadID: r.SpreadID,
+		Cards:    hydrateCards(m, r.Cards),
+	}
+	m.readingContent = r.Interpretation
+	m.readingBuf.Reset()
+	m.readingVP.SetContent(m.renderReadingMarkdown())
+	m.readingVP.GotoTop()
+	m.chatMessages = chatFromFollowUps(r.FollowUps)
+	m.chatStreamBuf.Reset()
+	if len(m.chatMessages) > 0 {
+		m.chatVP.SetContent(m.renderChatConversation(false))
+		m.chatVP.GotoBottom()
+	} else {
+		m.chatVP.SetContent("")
+	}
+	m.focusZone = "reading"
+	m.historyWritten = true
+	m.readingID = r.ID
+	m.followUpNeedsContext = true
+	m.toolCalls = nil
+	m.err = nil
+	m.retryNote = ""
+	m.input.Reset()
+	if m.bridge != nil {
+		m.bridge.clearMessages()
+		if m.bridge.guard != nil {
+			m.bridge.guard.AllowFollowUp()
+		}
+	}
+}
+
+func chatFromFollowUps(turns []domain.FollowUpTurn) []ChatMessage {
+	if len(turns) == 0 {
+		return nil
+	}
+	msgs := make([]ChatMessage, 0, len(turns))
+	for _, turn := range turns {
+		msgs = append(msgs, ChatMessage{
+			Role:      turn.Role,
+			Content:   turn.Content,
+			CreatedAt: turn.CreatedAt,
+		})
+	}
+	return msgs
+}
+
+func hydrateCards(m *Model, cards []domain.DrawnCard) []domain.DrawnCard {
+	if len(cards) == 0 {
+		return nil
+	}
+	out := make([]domain.DrawnCard, len(cards))
+	for i, card := range cards {
+		full := card.Card
+		if m.store != nil && m.store.Cards != nil && card.Card.ID != "" {
+			if looked, err := m.store.Cards.GetByID(card.Card.ID); err == nil {
+				full = looked
+			}
+		}
+		out[i] = domain.DrawnCard{
+			Card:        full,
+			Orientation: card.Orientation,
+			Position:    card.Position,
+		}
+	}
+	return out
+}
+
+// nextFollowUpPrompt returns the text sent to the agent.
+// A resumed history chat includes the saved reading once; a live follow-up
+// sends only the new question, because that session already has the reading.
+func (m *Model) nextFollowUpPrompt(question string) string {
+	if !m.followUpNeedsContext {
+		return question
+	}
+	m.followUpNeedsContext = false
+	return buildFollowUpContext(m.userInput, m.spreadType, m.drawResult, m.readingContent, m.chatMessages, question)
+}
+
+func buildFollowUpContext(question, spreadID string, draw *domain.DrawResult, interpretation string, messages []ChatMessage, followUp string) string {
+	var b strings.Builder
+	b.WriteString("这是对下面这次已完成占卜的追问。不要重新抽牌，直接基于原解读和已有对话回答。\n\n")
+	fmt.Fprintf(&b, "【问题】\n%s\n\n", strings.TrimSpace(question))
+	fmt.Fprintf(&b, "【牌阵】\n%s\n\n", displayOr(spreadLabel(spreadID), "未记录"))
+	if draw != nil && len(draw.Cards) > 0 {
+		b.WriteString("【牌面】\n")
+		for _, card := range draw.Cards {
+			b.WriteString(formatHistoryCard(card))
+			b.WriteString("\n")
+		}
+		b.WriteString("\n")
+	}
+	b.WriteString("【原解读】\n")
+	text := strings.TrimSpace(interpretation)
+	if text == "" {
+		text = "（无）"
+	}
+	b.WriteString(text)
+	b.WriteString("\n\n")
+
+	prior := messages
+	if n := len(prior); n > 0 && prior[n-1].Role == "user" && strings.TrimSpace(prior[n-1].Content) == strings.TrimSpace(followUp) {
+		prior = prior[:n-1]
+	}
+	if len(prior) > 0 {
+		b.WriteString("【已有追问】\n")
+		for _, msg := range prior {
+			who := "助手"
+			if msg.Role == "user" {
+				who = "你"
+			}
+			fmt.Fprintf(&b, "%s：%s\n\n", who, strings.TrimSpace(msg.Content))
+		}
+	}
+	fmt.Fprintf(&b, "【新的追问】\n%s", strings.TrimSpace(followUp))
+	return b.String()
 }

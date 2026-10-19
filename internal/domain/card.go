@@ -114,14 +114,23 @@ type DrawResult struct {
 	Cards    []DrawnCard `json:"cards"`
 }
 
+// FollowUpTurn is one message after the reading was saved.
+// Role is "user" or "assistant". CreatedAt is omitted for older records.
+type FollowUpTurn struct {
+	Role      string    `json:"role"`
+	Content   string    `json:"content"`
+	CreatedAt time.Time `json:"created_at,omitempty"`
+}
+
 // Reading represents a complete tarot reading session.
 type Reading struct {
-	ID             string      `json:"id"`
-	Question       string      `json:"question"`
-	SpreadID       string      `json:"spread_id"`
-	Cards          []DrawnCard `json:"cards"`
-	Interpretation string      `json:"interpretation"`
-	Disclaimer     string      `json:"disclaimer"`
-	Model          string      `json:"model"`
-	CreatedAt      time.Time   `json:"created_at"`
+	ID             string         `json:"id"`
+	Question       string         `json:"question"`
+	SpreadID       string         `json:"spread_id"`
+	Cards          []DrawnCard    `json:"cards"`
+	Interpretation string         `json:"interpretation"`
+	Disclaimer     string         `json:"disclaimer"`
+	Model          string         `json:"model"`
+	CreatedAt      time.Time      `json:"created_at"`
+	FollowUps      []FollowUpTurn `json:"followups,omitempty"`
 }

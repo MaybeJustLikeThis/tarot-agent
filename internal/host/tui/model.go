@@ -134,8 +134,9 @@ func (m *Model) layoutHeights() {
 
 // ChatMessage represents a single message in the conversation.
 type ChatMessage struct {
-	Role    string // "user" or "assistant"
-	Content string
+	Role      string // "user" or "assistant"
+	Content   string
+	CreatedAt time.Time
 }
 
 // Model is the main TUI model. Thin orchestrator — state logic lives in state.go.
@@ -197,7 +198,12 @@ type Model struct {
 	spinnerActive      bool
 
 	// historyWritten is set after the current draw has been appended once.
+	// readingID is that record. Later follow-ups update it instead of appending.
 	historyWritten bool
+	readingID      string
+	// followUpNeedsContext is set when a chat is resumed from history.
+	// The next follow-up prompt includes the saved reading; later turns do not.
+	followUpNeedsContext bool
 
 	// Focus zone for scroll control ("reading" or "chat")
 	focusZone string
@@ -360,7 +366,7 @@ func (m *Model) View() string {
 	case *ChatState:
 		inputLabel = "正在回答"
 	case *HistoryState:
-		inputLabel = "浏览历史记录（↑↓ 选择 · esc 返回）"
+		inputLabel = historyStatusLabel(m)
 	}
 
 	switch m.state.(type) {
@@ -440,6 +446,8 @@ func (m *Model) resetReading() {
 	m.readingBuf.Reset()
 	m.readingVP.SetContent("")
 	m.historyWritten = false
+	m.readingID = ""
+	m.followUpNeedsContext = false
 	m.retryNote = ""
 }
 
@@ -453,13 +461,13 @@ func (m *Model) resetChat() {
 
 // appendChatUserMessage adds a user message to the chat.
 func (m *Model) appendChatUserMessage(text string) {
-	m.chatMessages = append(m.chatMessages, ChatMessage{Role: "user", Content: text})
+	m.chatMessages = append(m.chatMessages, ChatMessage{Role: "user", Content: text, CreatedAt: time.Now()})
 }
 
 // finalizeChatStream moves the streaming buffer into chat messages.
 func (m *Model) finalizeChatStream() {
 	if m.chatStreamBuf.Len() > 0 {
-		m.chatMessages = append(m.chatMessages, ChatMessage{Role: "assistant", Content: m.chatStreamBuf.String()})
+		m.chatMessages = append(m.chatMessages, ChatMessage{Role: "assistant", Content: m.chatStreamBuf.String(), CreatedAt: time.Now()})
 		m.chatStreamBuf.Reset()
 	}
 }
