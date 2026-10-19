@@ -77,3 +77,27 @@ func TestPromptsMatchToolResults(t *testing.T) {
 		t.Fatal("pro prompt does not say interactions are absent")
 	}
 }
+
+func TestPromptsUseThreePartStructure(t *testing.T) {
+	for name, text := range map[string]string{
+		"pro":    systemPromptPro,
+		"casual": systemPromptCasual,
+	} {
+		for _, heading := range []string{"### 一句话结论", "### 逐张", "### 可执行建议"} {
+			if !strings.Contains(text, heading) {
+				t.Errorf("%s prompt missing %s", name, heading)
+			}
+		}
+		for _, old := range []string{"### 第一层", "### 第六层", "1500-2500"} {
+			if strings.Contains(text, old) {
+				t.Errorf("%s prompt still has %s", name, old)
+			}
+		}
+		if !strings.Contains(text, "get_card_meaning") || !strings.Contains(text, "save_reading") {
+			t.Errorf("%s prompt dropped the required tools", name)
+		}
+		if !strings.Contains(text, "1–2") {
+			t.Errorf("%s prompt does not limit advice to 1-2 items", name)
+		}
+	}
+}
