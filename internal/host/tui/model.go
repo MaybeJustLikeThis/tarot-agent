@@ -66,6 +66,8 @@ func (m *Model) layoutHeights() {
 		inputH = inputHHistory
 	case *CardDetailState:
 		inputH = inputHDetail
+	case *WelcomeState:
+		inputH = 1
 	default:
 		inputH = inputHDefault
 	}
@@ -384,6 +386,8 @@ func (m *Model) View() string {
 	case *HistoryState:
 		b.WriteString(statusBarStyle.Render("  " + inputLabel))
 	case *CardDetailState:
+		b.WriteString(statusBarStyle.Render("  " + inputHint(m)))
+	case *WelcomeState:
 		b.WriteString(statusBarStyle.Render("  " + inputHint(m)))
 	default:
 		b.WriteString(renderInputZone(m, inputLabel))

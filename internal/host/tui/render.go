@@ -123,6 +123,8 @@ func inputHint(m *Model) string {
 		return "←→/hl 换牌 · esc 返回解读"
 	case *CrisisState:
 		return "esc 返回，先不抽牌"
+	case *WelcomeState:
+		return "任意键继续 · 空输入 ? 再看"
 	default:
 		return "回车提交 · 空输入 tab 历史 · ctrl+d 每日一牌 · card 查牌 · 输入 q 回车退出"
 	}
@@ -239,6 +241,8 @@ func stateDisplayName(s State) string {
 		return "对话中"
 	case *HistoryState:
 		return "历史记录"
+	case *WelcomeState:
+		return "初次使用"
 	default:
 		return ""
 	}

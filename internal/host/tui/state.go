@@ -52,6 +52,11 @@ func (s *InputState) Update(m *Model, msg tea.Msg) (State, tea.Cmd) {
 				}
 				return &HistoryState{}, nil
 			}
+		case "?":
+			// Replay the first-run guide. A question can still contain "?".
+			if strings.TrimSpace(m.input.Value()) == "" {
+				return &WelcomeState{}, nil
+			}
 		case "ctrl+d":
 			m.userInput = domain.DailyQuestion
 			m.questionAdvice = nil
